@@ -439,7 +439,7 @@ export default function App() {
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-3">
                             <Zap className="text-yellow-400" size={28} />
-                            <span className="text-white font-bold text-xl tracking-wider" style={{ fontFamily: 'var(--font-orbitron)' }}>BLACK FLASH</span>
+                            <span className="text-white font-bold text-xl tracking-wider" style={{ fontFamily: 'var(--font-orbitron)' }}>BLINDCODE</span>
                         </div>
                         <div className="h-8 w-px bg-[#3c3c3c]" />
                         <div className="flex items-center gap-3">

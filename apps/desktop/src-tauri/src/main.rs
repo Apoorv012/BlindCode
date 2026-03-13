@@ -22,7 +22,7 @@ pub struct ExecutionResult {
 async fn execute_code(code: String, language: String, input: String) -> ExecutionResult {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
     let mut temp_dir = env::temp_dir();
-    temp_dir.push(format!("black_flash_{}", timestamp));
+    temp_dir.push(format!("blind_code_{}", timestamp));
     
     if let Err(e) = fs::create_dir_all(&temp_dir) {
         return ExecutionResult {
