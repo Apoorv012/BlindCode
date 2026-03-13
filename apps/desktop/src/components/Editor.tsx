@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Play, Eye, EyeOff, X, ChevronDown, Code2 } from "lucide-react";
-import CodeWorkspace from "./CodeWorkspace"; // <-- Import the new component
+import { Play, Eye, EyeOff, X, ChevronDown, Code2, Send } from "lucide-react";
+import CodeWorkspace from "./CodeWorkspace";
 
 interface EditorProps {
     code: string;
     onCodeChange: (code: string) => void;
     isBlurred: boolean;
     onRun: () => void;
+    onSubmit: () => void; // <--- ADD THIS LINE
     onVision: () => void;
     onPartialVision: (cost: number, text: string) => void;
     level: number;
@@ -16,7 +17,6 @@ interface EditorProps {
     onLanguageChange: (lang: string) => void;
     isCompiling: boolean;
 }
-
 const LANGUAGES = [
     { id: "cpp", name: "C++", icon: "⚡", extension: ".cpp" },
     { id: "python", name: "Python", icon: "🐍", extension: ".py" },
@@ -36,6 +36,7 @@ export default function Editor({
     onCodeChange,
     isBlurred,
     onRun,
+    onSubmit,
     onVision,
     onPartialVision,
     level,

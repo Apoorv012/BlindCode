@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import Sidebar from "./components/Sidebar";
 import Registration from "./components/Registration";
 import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
-import { LogOut, Trophy, Target, Clock, Zap, Maximize2, Minimize2 } from "lucide-react";
+import ProblemSidebar, { type SubmissionData } from "./components/ProblemSidebar";
+import { LogOut, Trophy, Target, Clock, Zap } from "lucide-react";
 import { CHALLENGES } from "./data/questions";
 import { compileCode } from "./services/api";
 import "./App.css";
@@ -23,36 +23,23 @@ export default function App() {
     const [peekCount, setPeekCount] = useState(0);
     const [language, setLanguage] = useState("cpp");
     const [isCompiling, setIsCompiling] = useState(false);
+
+    // Resizer States
     const [editorHeight, setEditorHeight] = useState(65);
-    const [isDragging, setIsDragging] = useState(false);
+    const [isDraggingEditor, setIsDraggingEditor] = useState(false);
+
+    const [sidebarWidth, setSidebarWidth] = useState(450);
+    const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
+
     const [score, setScore] = useState(0);
     const [showLevelComplete, setShowLevelComplete] = useState(false);
     const [showGameComplete, setShowGameComplete] = useState(false);
     const [levelStartTime, setLevelStartTime] = useState(0);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const enterFullscreen = () => {
-        document.documentElement.requestFullscreen().then(() => {
-            setIsFullscreen(true);
-        }).catch(() => { });
-    };
-
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            enterFullscreen();
-        } else {
-            document.exitFullscreen().then(() => {
-                setIsFullscreen(false);
-            }).catch(() => { });
-        }
-    };
-
-    useEffect(() => {
-        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
-        document.addEventListener('fullscreenchange', onFsChange);
-        return () => document.removeEventListener('fullscreenchange', onFsChange);
-    }, []);
+    // Sidebar States
+    const [activeSidebarTab, setActiveSidebarTab] = useState<"description" | "submissions">("description");
+    const [submissionData, setSubmissionData] = useState<SubmissionData>({ status: "idle", message: "" });
 
     const handlePartialVision = (cost: number, text: string) => {
         setTimer(prev => prev + cost);
@@ -102,21 +89,22 @@ export default function App() {
         }
     }, [visionTimeLeft]);
 
+    // Handle Editor Vertical Resizing
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isDragging || !containerRef.current) return;
+            if (!isDraggingEditor || !containerRef.current) return;
             const containerRect = containerRef.current.getBoundingClientRect();
             const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100;
             setEditorHeight(Math.min(Math.max(newHeight, 30), 85));
         };
 
         const handleMouseUp = () => {
-            setIsDragging(false);
+            setIsDraggingEditor(false);
             document.body.style.cursor = "";
             document.body.style.userSelect = "";
         };
 
-        if (isDragging) {
+        if (isDraggingEditor) {
             document.body.style.cursor = "row-resize";
             document.body.style.userSelect = "none";
             document.addEventListener("mousemove", handleMouseMove);
@@ -127,7 +115,35 @@ export default function App() {
             document.removeEventListener("mousemove", handleMouseMove);
             document.removeEventListener("mouseup", handleMouseUp);
         };
-    }, [isDragging]);
+    }, [isDraggingEditor]);
+
+    // Handle Sidebar Horizontal Resizing
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDraggingSidebar) return;
+            // Constrain the sidebar width between 300px and 800px
+            const newWidth = Math.max(300, Math.min(e.clientX, 800));
+            setSidebarWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            setIsDraggingSidebar(false);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+        };
+
+        if (isDraggingSidebar) {
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            document.addEventListener("mousemove", handleMouseMove);
+            document.addEventListener("mouseup", handleMouseUp);
+        }
+
+        return () => {
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, [isDraggingSidebar]);
 
     const sabotageCode = () => {
         setCode((prevCode) => {
@@ -146,10 +162,9 @@ export default function App() {
         setIsRegistered(true);
         setCode(currentChallenge.starterCode[language]);
         setLevelStartTime(Date.now());
-        enterFullscreen();
+
         addLog(`✓ Welcome, ${name}! Game started.`);
         addLog(`🎮 Level ${currentLevel}: ${currentChallenge.title}`);
-        addLog(`📋 Challenge: ${currentChallenge.description}`);
         addLog(`⏱️ Time limit: ${currentChallenge.timeLimit} seconds`);
         addLog("👁️ Use Vision to peek, but beware of the sabotage...");
     };
@@ -167,6 +182,8 @@ export default function App() {
         setScore(0);
         setShowLevelComplete(false);
         setShowGameComplete(false);
+        setSubmissionData({ status: "idle", message: "" });
+        setActiveSidebarTab("description");
     };
 
     const handleCodeChange = (newCode: string) => {
@@ -186,9 +203,9 @@ export default function App() {
         return Math.max(0, baseScore + timeBonus - peekPenalty);
     };
 
+    // JUST FOR TESTING - Prints output to Terminal
     const handleRun = async () => {
         if (isCompiling) return;
-
         setIsCompiling(true);
         addLog("🔄 Compiling...");
 
@@ -197,51 +214,86 @@ export default function App() {
 
             if (result.error) {
                 addLog(`❌ Error: ${result.error}`);
-                setIsCompiling(false);
                 return;
             }
 
             addLog("▶️ Execution started...");
             addLog("━━━━━━━━━━━━━━━━ Output ━━━━━━━━━━━━━━━━");
-
             const outputLines = result.output.split("\n");
             outputLines.forEach((line: string) => {
-                if (line.trim()) {
-                    addLog(`   ${line}`);
-                }
+                if (line.trim()) addLog(`   ${line}`);
             });
-
             addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
             if (result.hasError) {
-                addLog(`❌ Compilation/Runtime error - try again!`);
-            } else {
-                const actualOutput = result.output.trim();
-                const expectedOutput = currentChallenge.expectedOutput.trim();
-
-                if (actualOutput === expectedOutput) {
-                    const timeTaken = Math.floor((Date.now() - levelStartTime) / 1000);
-                    const levelScore = calculateScore(timeTaken, peekCount, currentChallenge.difficulty);
-                    setScore((prev) => prev + levelScore);
-
-                    addLog(`✅ CORRECT! Level ${currentLevel} completed!`);
-                    addLog(`🏆 Score: +${levelScore} points (Time: ${timeTaken}s, Peeks: ${peekCount})`);
-
-                    if (currentLevel >= CHALLENGES.length) {
-                        setShowGameComplete(true);
-                        addLog(`🎉 CONGRATULATIONS! You completed all ${CHALLENGES.length} levels!`);
-                    } else {
-                        setShowLevelComplete(true);
-                    }
-                } else {
-                    addLog(`❌ Wrong output!`);
-                    addLog(`   Expected: "${expectedOutput}"`);
-                    addLog(`   Got: "${actualOutput}"`);
-                }
+                addLog(`❌ Compilation/Runtime error - check your code.`);
             }
         } catch (error) {
             addLog("❌ Failed to connect to compiler service");
             console.error(error);
+        } finally {
+            setIsCompiling(false);
+        }
+    };
+
+    // OFFICIAL SUBMISSION - Grades code and updates Sidebar tab
+    const handleSubmit = async () => {
+        if (isCompiling) return;
+
+        setIsCompiling(true);
+        setActiveSidebarTab("submissions");
+        setSubmissionData({ status: "idle", message: "Evaluating your code..." });
+        addLog("🚀 Submitting code for evaluation...");
+
+        try {
+            const result = await compileCode(code, language);
+
+            if (result.error || result.hasError) {
+                setSubmissionData({
+                    status: "error",
+                    message: "Compilation or Runtime Error. Check the terminal logs for details.",
+                });
+                addLog(`❌ Submission failed: Compilation/Runtime Error.`);
+                return;
+            }
+
+            const actualOutput = result.output.trim();
+            const expectedOutput = currentChallenge.expectedOutput.trim();
+
+            if (actualOutput === expectedOutput) {
+                const timeTaken = Math.floor((Date.now() - levelStartTime) / 1000);
+                const levelScore = calculateScore(timeTaken, peekCount, currentChallenge.difficulty);
+
+                setScore((prev) => prev + levelScore);
+                setSubmissionData({
+                    status: "accepted",
+                    message: "All test cases passed! Outstanding work.",
+                    score: levelScore,
+                    time: timeTaken,
+                    peeks: peekCount,
+                });
+
+                addLog(`✅ SUBMISSION ACCEPTED: +${levelScore} pts`);
+
+                setTimeout(() => {
+                    if (currentLevel >= CHALLENGES.length) {
+                        setShowGameComplete(true);
+                    } else {
+                        setShowLevelComplete(true);
+                    }
+                }, 1500);
+            } else {
+                setSubmissionData({
+                    status: "rejected",
+                    message: "Your output did not match the expected output.",
+                    actual: actualOutput,
+                    expected: expectedOutput,
+                });
+                addLog(`❌ SUBMISSION REJECTED: Wrong Answer.`);
+            }
+        } catch (error) {
+            setSubmissionData({ status: "error", message: "Failed to connect to compiler service." });
+            addLog("❌ Failed to connect to compiler service");
         } finally {
             setIsCompiling(false);
         }
@@ -255,9 +307,11 @@ export default function App() {
         setPeekCount(0);
         setIsBlurred(true);
         setLevelStartTime(Date.now());
+        setActiveSidebarTab("description");
+        setSubmissionData({ status: "idle", message: "" });
+
         addLog(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
         addLog(`🎮 Level ${currentLevel + 1}: ${nextChallenge.title}`);
-        addLog(`📋 Challenge: ${nextChallenge.description}`);
         addLog(`⏱️ Time limit: ${nextChallenge.timeLimit} seconds`);
     };
 
@@ -277,7 +331,7 @@ export default function App() {
     };
 
     return (
-        <div className="h-screen flex bg-[#1a1a1a] overflow-hidden">
+        <div className="h-screen flex flex-row bg-[#1a1a1a] overflow-hidden">
             {!isRegistered && <Registration onRegister={handleRegister} />}
 
             {showLevelComplete && (
@@ -322,9 +376,32 @@ export default function App() {
                 </div>
             )}
 
-            <Sidebar />
+            {/* Left Column: Problem Sidebar (Now wrapped for dynamic width) */}
+            {isRegistered && (
+                <div style={{ width: sidebarWidth }} className="shrink-0 flex flex-col relative h-full">
+                    <ProblemSidebar
+                        challenge={currentChallenge}
+                        activeTab={activeSidebarTab}
+                        onTabChange={setActiveSidebarTab}
+                        submission={submissionData}
+                        level={currentLevel}
+                    />
+                </div>
+            )}
 
-            <div className="flex-1 flex flex-col min-w-0">
+            {/* Horizontal Resizer for Sidebar */}
+            {isRegistered && (
+                <div
+                    className="w-2 bg-[#252526] hover:bg-[#007acc] cursor-col-resize flex flex-col items-center justify-center shrink-0 transition-colors group z-50 border-r border-[#3c3c3c]"
+                    onMouseDown={() => setIsDraggingSidebar(true)}
+                >
+                    <div className="h-20 w-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
+                </div>
+            )}
+
+            {/* Right Column: Editor and Terminal */}
+            <div className="flex-1 flex flex-col min-w-0 h-full">
+                {/* Top Info Bar */}
                 <div className="flex items-center justify-between px-8 py-4 bg-[#252526] border-b border-[#3c3c3c] shrink-0">
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-3">
@@ -351,13 +428,7 @@ export default function App() {
                             <Clock size={18} className="text-white" />
                             <span className="text-white font-mono font-bold text-base">{formatTime(timer)}</span>
                         </div>
-                        <button
-                            onClick={toggleFullscreen}
-                            className="p-3 bg-[#1e1e1e] hover:bg-[#2a2a2a] rounded-xl text-white transition-colors"
-                            title="Toggle Fullscreen"
-                        >
-                            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                        </button>
+
                         <button
                             onClick={handleLogout}
                             className="flex items-center gap-2 px-5 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 rounded-xl transition-all text-base font-semibold"
@@ -368,19 +439,6 @@ export default function App() {
                     </div>
                 </div>
 
-                <div className="px-8 py-4 bg-[#1e1e1e] border-b border-[#3c3c3c] shrink-0">
-                    <div className="flex items-center gap-5">
-                        <span className={`px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wide ${currentChallenge.difficulty === "easy" ? "bg-green-600/20 text-green-400 border border-green-600/30" :
-                            currentChallenge.difficulty === "medium" ? "bg-yellow-600/20 text-yellow-400 border border-yellow-600/30" :
-                                "bg-red-600/20 text-red-400 border border-red-600/30"
-                            }`}>
-                            {currentChallenge.difficulty}
-                        </span>
-                        <span className="text-white text-lg font-bold">{currentChallenge.title}</span>
-                        <span className="text-[#858585] text-base">— {currentChallenge.description}</span>
-                    </div>
-                </div>
-
                 <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden">
                     <div style={{ height: `${editorHeight}%` }} className="overflow-hidden">
                         <Editor
@@ -388,6 +446,7 @@ export default function App() {
                             onCodeChange={handleCodeChange}
                             isBlurred={isBlurred}
                             onRun={handleRun}
+                            onSubmit={handleSubmit}
                             onVision={handleVision}
                             level={currentLevel}
                             visionTimeLeft={visionTimeLeft}
@@ -401,7 +460,7 @@ export default function App() {
 
                     <div
                         className="h-2 bg-[#252526] hover:bg-[#007acc] cursor-row-resize flex items-center justify-center shrink-0 transition-colors group"
-                        onMouseDown={() => setIsDragging(true)}
+                        onMouseDown={() => setIsDraggingEditor(true)}
                     >
                         <div className="w-20 h-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
                     </div>
