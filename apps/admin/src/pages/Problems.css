@@ -159,3 +159,54 @@
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Problem Code Badge ── */
+.problem-code-badge {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #7c6af7;
+  background: rgba(124,106,247,0.1);
+  border: 1px solid rgba(124,106,247,0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.problem-code-badge:hover { background: rgba(124,106,247,0.2); border-color: #7c6af7; }
+.problem-code-badge.code-copied { color: #4ecdc4; background: rgba(78,205,196,0.1); border-color: rgba(78,205,196,0.4); }
+
+.large-code {
+  font-size: 0.8rem;
+  padding: 4px 12px;
+}
+
+/* Detail title row with code badge */
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+/* Form title row with code */
+.form-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.form-code-display {
+  font-family: 'Space Mono', 'Courier New', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #7c6af7;
+  background: rgba(124,106,247,0.1);
+  border: 1px solid rgba(124,106,247,0.3);
+  padding: 4px 12px;
+  border-radius: 4px;
+}

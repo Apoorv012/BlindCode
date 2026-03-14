@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './Login.css'
-
-// API: POST /auth/login
-// Body: { username: string, password: string }
-// Returns: { token: string, admin: { id, name } }
-// For now: mock login with hardcoded credentials
-
-const MOCK_CREDENTIALS = { username: 'admin', password: 'blindcode123' }
+import { apiLogin } from '../api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -25,26 +19,15 @@ export default function Login() {
     }
 
     setLoading(true)
-    // Simulate API call delay
-    await new Promise(r => setTimeout(r, 800))
-
-    // TODO: Replace with real API call
-    // const res = await fetch('/api/auth/login', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ username, password })
-    // })
-    // const data = await res.json()
-    // if (!res.ok) { setError(data.message); setLoading(false); return; }
-    // localStorage.setItem('bc_admin_token', data.token)
-
-    if (username === MOCK_CREDENTIALS.username && password === MOCK_CREDENTIALS.password) {
-      localStorage.setItem('bc_admin_token', 'mock_token_123')
+    try {
+      const data = await apiLogin(username, password)
+      localStorage.setItem('bc_admin_token', data.token)
       navigate('/')
-    } else {
-      setError('Invalid username or password')
+    } catch (err: any) {
+      setError(err.message || 'Invalid username or password')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -130,8 +113,7 @@ export default function Login() {
           </div>
 
           <div className="login-hint">
-            <span className="hint-label">Demo credentials</span>
-            <code className="hint-code">admin / blindcode123</code>
+            <span className="hint-label">Register an account first via API or seed script</span>
           </div>
         </div>
 

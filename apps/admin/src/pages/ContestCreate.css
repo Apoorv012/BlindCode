@@ -1,0 +1,623 @@
+/* ── ContestCreate ── */
+.cc-page {
+  min-height: 100vh;
+  background: #0d0d0f;
+  color: #e8e8f0;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Header ── */
+.cc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  border-bottom: 1px solid #2a2a35;
+  background: #141418;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.cc-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 200px;
+}
+
+.cc-back-btn {
+  background: none;
+  border: 1px solid #2a2a35;
+  color: #9090a8;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.cc-back-btn:hover {
+  border-color: #6c63ff;
+  color: #6c63ff;
+}
+
+.cc-logo-mark {
+  width: 28px;
+  height: 28px;
+  background: #6c63ff;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+}
+
+.cc-logo-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e8e8f0;
+}
+
+.cc-logo-sub {
+  font-size: 0.6rem;
+  color: #5a5a72;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ── Step Indicator ── */
+.cc-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cc-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+
+.cc-step.cc-step-active {
+  opacity: 1;
+}
+
+.cc-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #2a2a35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9090a8;
+  transition: all 0.2s;
+}
+
+.cc-step-active .cc-step-num {
+  background: #6c63ff;
+  border-color: #6c63ff;
+  color: #fff;
+}
+
+.cc-step-label {
+  font-size: 0.72rem;
+  color: #9090a8;
+  letter-spacing: 0.5px;
+}
+
+.cc-step-active .cc-step-label {
+  color: #e8e8f0;
+}
+
+.cc-step-line {
+  width: 48px;
+  height: 1px;
+  background: #2a2a35;
+  transition: background 0.2s;
+}
+
+.cc-step-line-active {
+  background: #6c63ff;
+}
+
+/* ── Main ── */
+.cc-main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem;
+}
+
+/* ── Step 1 Card ── */
+.cc-card {
+  background: #141418;
+  border: 1px solid #2a2a35;
+  border-radius: 10px;
+  padding: 2rem;
+}
+
+.cc-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e8e8f0;
+  margin-bottom: 0.3rem;
+}
+
+.cc-card-sub {
+  font-size: 0.78rem;
+  color: #9090a8;
+  margin-bottom: 2rem;
+}
+
+.cc-field {
+  margin-bottom: 1.75rem;
+}
+
+.cc-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #9090a8;
+  margin-bottom: 0.6rem;
+}
+
+.cc-input {
+  width: 100%;
+  background: #0d0d0f;
+  border: 1px solid #2a2a35;
+  border-radius: 6px;
+  padding: 10px 14px;
+  color: #e8e8f0;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.cc-input:focus {
+  border-color: #6c63ff;
+}
+
+.cc-input::placeholder {
+  color: #5a5a72;
+}
+
+/* Duration */
+.cc-duration-display {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #6c63ff;
+  margin-bottom: 1rem;
+}
+
+.cc-duration-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.cc-duration-pill {
+  background: #0d0d0f;
+  border: 1px solid #2a2a35;
+  color: #9090a8;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.cc-duration-pill:hover {
+  border-color: #6c63ff;
+  color: #6c63ff;
+}
+
+.cc-duration-active {
+  background: #6c63ff22;
+  border-color: #6c63ff;
+  color: #6c63ff;
+  font-weight: 700;
+}
+
+.cc-slider {
+  width: 100%;
+  accent-color: #6c63ff;
+  cursor: pointer;
+}
+
+.cc-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: #5a5a72;
+  margin-top: 0.25rem;
+}
+
+/* ── Actions ── */
+.cc-actions {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cc-btn-primary {
+  background: #6c63ff;
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.cc-btn-primary:hover:not(.cc-btn-disabled) {
+  opacity: 0.85;
+}
+
+.cc-btn-full {
+  width: 100%;
+  padding: 12px;
+}
+
+.cc-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── Step 2 Layout ── */
+.cc-step2-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+/* ── Problems Panel ── */
+.cc-problems-panel {
+  background: #141418;
+  border: 1px solid #2a2a35;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cc-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #2a2a35;
+}
+
+.cc-panel-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e8e8f0;
+}
+
+.cc-add-problem-link {
+  background: none;
+  border: none;
+  color: #6c63ff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+
+.cc-add-problem-link:hover {
+  opacity: 0.75;
+}
+
+.cc-filters {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #2a2a35;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cc-search {
+  width: 100%;
+  background: #0d0d0f;
+  border: 1px solid #2a2a35;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #e8e8f0;
+  font-size: 0.8rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.cc-search:focus {
+  border-color: #6c63ff;
+}
+
+.cc-search::placeholder {
+  color: #5a5a72;
+}
+
+.cc-diff-filters {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cc-diff-btn {
+  background: none;
+  border: 1px solid #2a2a35;
+  color: #9090a8;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.cc-diff-btn:hover {
+  border-color: #9090a8;
+  color: #e8e8f0;
+}
+
+.cc-diff-active {
+  background: #6c63ff22;
+  border-color: #6c63ff;
+  color: #6c63ff;
+}
+
+/* Problem list */
+.cc-problem-list {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.cc-problem-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid #1a1a20;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.cc-problem-row:last-child {
+  border-bottom: none;
+}
+
+.cc-problem-row:hover {
+  background: #1a1a20;
+}
+
+.cc-problem-selected {
+  background: #6c63ff0d;
+  border-left: 2px solid #6c63ff;
+}
+
+.cc-problem-selected:hover {
+  background: #6c63ff18;
+}
+
+.cc-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #2a2a35;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: #fff;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.cc-checkbox-checked {
+  background: #6c63ff;
+  border-color: #6c63ff;
+}
+
+.cc-problem-info {
+  flex: 1;
+}
+
+.cc-problem-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.cc-problem-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e8e8f0;
+}
+
+.cc-problem-code {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6c63ff;
+  background: rgba(108,99,255,0.1);
+  border: 1px solid rgba(108,99,255,0.25);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.cc-problem-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.cc-tag {
+  font-size: 0.65rem;
+  color: #9090a8;
+  background: #1a1a20;
+  border: 1px solid #2a2a35;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+/* Diff badges */
+.cc-diff-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.diff-easy { background: #22c55e18; color: #22c55e; }
+.diff-medium { background: #f59e0b18; color: #f59e0b; }
+.diff-hard { background: #ef444418; color: #ef4444; }
+
+/* ── Summary Panel ── */
+.cc-summary-panel {
+  background: #141418;
+  border: 1px solid #2a2a35;
+  border-radius: 10px;
+  padding: 1.5rem;
+  position: sticky;
+  top: 72px;
+}
+
+.cc-summary-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: #5a5a72;
+  margin-bottom: 1.25rem;
+}
+
+.cc-summary-field {
+  margin-bottom: 1.25rem;
+}
+
+.cc-summary-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #5a5a72;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cc-summary-count {
+  background: #6c63ff;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.cc-summary-val {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e8e8f0;
+}
+
+.cc-selected-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.cc-no-problems {
+  font-size: 0.75rem;
+  color: #5a5a72;
+  padding: 0.5rem 0;
+}
+
+.cc-selected-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #0d0d0f;
+  border: 1px solid #2a2a35;
+  border-radius: 5px;
+}
+
+.cc-selected-num {
+  font-size: 0.65rem;
+  color: #5a5a72;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.cc-selected-name {
+  font-size: 0.78rem;
+  color: #e8e8f0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-remove-btn {
+  background: none;
+  border: none;
+  color: #5a5a72;
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 0;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.cc-remove-btn:hover {
+  color: #ef4444;
+}
+
+.cc-hint {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #5a5a72;
+  margin-top: 0.75rem;
+}
+
+/* ── Spinner ── */
+.cc-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff40;
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: cc-spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes cc-spin {
+  to { transform: rotate(360deg); }
+}
