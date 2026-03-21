@@ -1,0 +1,414 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+/* ── Root ──────────────────────────────────────────────── */
+.ud-root {
+  position: fixed;
+  inset: 0;
+  background: #0f0f0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+/* ── Background grid ────────────────────────────────────── */
+.ud-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 122, 204, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 122, 204, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* ── Glow ───────────────────────────────────────────────── */
+.ud-glow {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 300px;
+  background: radial-gradient(ellipse, rgba(0, 122, 204, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── Center container ───────────────────────────────────── */
+.ud-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+  max-width: 480px;
+  padding: 0 20px;
+}
+
+/* ── Logo ───────────────────────────────────────────────── */
+.ud-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ud-logo-icon {
+  color: #fbbf24;
+}
+
+.ud-logo-text {
+  font-family: 'Orbitron', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 0.15em;
+}
+
+/* ── Card ───────────────────────────────────────────────── */
+.ud-card {
+  width: 100%;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.08), 0 24px 48px rgba(0, 0, 0, 0.5);
+  animation: ud-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ud-slide-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ud-card-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: #007acc;
+  text-transform: uppercase;
+}
+
+.ud-card-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+.ud-card-sub {
+  font-size: 13px;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Inputs ─────────────────────────────────────────────── */
+.ud-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ud-code-input,
+.ud-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f0f0f;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-family: 'Orbitron', monospace;
+  color: #ffffff;
+  font-size: 20px;
+  letter-spacing: 0.25em;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ud-name-input {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  text-align: left;
+}
+
+.ud-code-input:focus,
+.ud-name-input:focus {
+  border-color: #007acc;
+  box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.15);
+}
+
+.ud-code-input::placeholder,
+.ud-name-input::placeholder {
+  color: #444;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+}
+
+.ud-input-error {
+  border-color: #ef4444 !important;
+}
+
+.ud-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #ef4444;
+}
+
+/* ── Button ─────────────────────────────────────────────── */
+.ud-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 20px;
+  background: #007acc;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: 0.04em;
+}
+
+.ud-btn:hover:not(.ud-btn-disabled) {
+  background: #0091ea;
+  transform: translateY(-1px);
+}
+
+.ud-btn:active:not(.ud-btn-disabled) {
+  transform: translateY(0);
+}
+
+.ud-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ud-btn-ghost {
+  background: transparent;
+  color: #666;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  flex: 0 0 auto;
+}
+
+.ud-btn-ghost:hover {
+  color: #ccc;
+  border-color: #444;
+}
+
+.ud-btn-row {
+  display: flex;
+  gap: 10px;
+}
+
+.ud-btn-row .ud-btn {
+  flex: 1;
+}
+
+/* ── Spin animation ─────────────────────────────────────── */
+.ud-spin {
+  animation: ud-spin-anim 0.8s linear infinite;
+}
+
+@keyframes ud-spin-anim {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Contest info (name screen) ─────────────────────────── */
+.ud-contest-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ud-contest-code-tag {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #007acc;
+  background: rgba(0, 122, 204, 0.12);
+  border: 1px solid rgba(0, 122, 204, 0.25);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.ud-contest-name-tag {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.ud-contest-meta {
+  display: flex;
+  gap: 10px;
+}
+
+.ud-meta-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #888;
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.ud-problems-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.ud-problem-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+}
+
+.ud-problem-num {
+  font-size: 11px;
+  color: #555;
+  min-width: 16px;
+}
+
+.ud-problem-title {
+  flex: 1;
+  font-size: 13px;
+  color: #ccc;
+}
+
+.ud-diff {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.diff-easy  { color: #22c55e; background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.2); }
+.diff-medium{ color: #f59e0b; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
+.diff-hard  { color: #ef4444; background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.2); }
+
+.ud-divider {
+  height: 1px;
+  background: #222;
+}
+
+/* ── Waiting screen ─────────────────────────────────────── */
+.ud-card-waiting {
+  align-items: center;
+  text-align: center;
+  padding: 40px 32px;
+}
+
+.ud-waiting-icon {
+  width: 64px;
+  height: 64px;
+  background: rgba(0, 122, 204, 0.1);
+  border: 1px solid rgba(0, 122, 204, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ud-waiting-users {
+  color: #007acc;
+}
+
+.ud-waiting-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.ud-waiting-name {
+  font-size: 15px;
+  color: #888;
+  margin: 0;
+}
+
+.ud-waiting-contest {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.ud-waiting-cname {
+  font-size: 14px;
+  color: #ccc;
+}
+
+.ud-waiting-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.ud-waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: ud-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ud-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+.ud-waiting-label {
+  font-size: 13px;
+  color: #888;
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 260px;
+  text-align: left;
+}
+
+.ud-waiting-hint {
+  font-size: 12px;
+  color: #444;
+  margin: 0;
+  line-height: 1.6;
+}
