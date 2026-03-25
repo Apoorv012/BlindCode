@@ -2,6 +2,7 @@ import express from 'express'
 import Contest from '../models/Contest'
 import Problem from '../models/Problem'
 import { protect, AuthRequest } from '../middleware/auth'
+import mongoose from 'mongoose'
 
 const router = express.Router()
 
@@ -9,6 +10,76 @@ const router = express.Router()
 const generateContestCode = (): string => {
   return 'BC' + Math.floor(1000 + Math.random() * 9000)
 }
+
+// ─── Public routes (no auth — for desktop user app) ──────────────────────────
+
+// GET /contests/code/:contestCode — look up contest by code (used by user app)
+router.get('/code/:contestCode', async (req, res) => {
+  try {
+    const contest = await Contest.findOne({
+      contestCode: req.params.contestCode.toUpperCase()
+    }).populate('problemIds', 'title difficulty')
+    if (!contest) {
+      res.status(404).json({ message: 'Invalid contest code. Please check and try again.' })
+      return
+    }
+    if (contest.status === 'ended') {
+      res.status(400).json({ message: 'This contest has already ended.' })
+      return
+    }
+    res.json(contest)
+  } catch {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// POST /contests/:contestId/join — user joins a contest by contestCode (no auth needed)
+router.post('/:contestId/join', async (req, res) => {
+  try {
+    const { name, addedByAdmin = false } = req.body
+    if (!name || !name.trim()) {
+      res.status(400).json({ message: 'Name is required' })
+      return
+    }
+    const contest = await Contest.findOne({ contestCode: req.params.contestId })
+    if (!contest) {
+      res.status(404).json({ message: 'Contest not found' })
+      return
+    }
+    if (contest.status === 'ended') {
+      res.status(400).json({ message: 'Contest has already ended' })
+      return
+    }
+    const participant = {
+      _id: new mongoose.Types.ObjectId(),
+      name: name.trim(),
+      addedByAdmin,
+      joinedAt: new Date()
+    }
+    await Contest.findByIdAndUpdate(contest._id, {
+      $push: { participants: participant }
+    })
+    res.status(201).json(participant)
+  } catch {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// GET /contests/:contestId/participants — get participant list (polled by admin lobby)
+router.get('/:contestId/participants', async (req, res) => {
+  try {
+    const contest = await Contest.findOne({ contestCode: req.params.contestId })
+    if (!contest) {
+      res.status(404).json({ message: 'Contest not found' })
+      return
+    }
+    res.json((contest as any).participants || [])
+  } catch {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// ─── Admin protected routes ───────────────────────────────────────────────────
 
 // GET /contests — get all contests for this admin
 router.get('/', protect, async (req: AuthRequest, res) => {
@@ -55,12 +126,12 @@ router.get('/:contestId', protect, async (req: AuthRequest, res) => {
   }
 })
 
-// POST /contests/:contestId/start
+// POST /contests/:contestId/start — sets status to 'active' (user app polls for this)
 router.post('/:contestId/start', protect, async (req: AuthRequest, res) => {
   try {
     const contest = await Contest.findOneAndUpdate(
       { contestCode: req.params.contestId, adminId: req.adminId },
-      { status: 'running', startedAt: new Date() },
+      { status: 'active', startedAt: new Date() },
       { new: true }
     )
     if (!contest) {
@@ -84,7 +155,7 @@ router.post('/:contestId/pause', protect, async (req: AuthRequest, res) => {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    const newStatus = contest.status === 'running' ? 'paused' : 'running'
+    const newStatus = contest.status === 'active' ? 'paused' : 'active'
     contest.status = newStatus
     await contest.save()
     res.json({ status: newStatus })

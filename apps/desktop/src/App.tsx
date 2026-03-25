@@ -1,19 +1,75 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import Registration from "./components/Registration";
+import { useState } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData } from "./components/ProblemSidebar";
 import { LogOut, Trophy, Target, Clock, Zap } from "lucide-react";
 import { CHALLENGES } from "./data/questions";
 import { compileCode } from "./services/api";
+import UserDashboard from "./pages/UserDashboard";
 import "./App.css";
 
+// ── Contest info shape (passed from UserDashboard on join) ────────────────────
+export interface ContestInfo {
+    _id: string;
+    contestCode: string;
+    name: string;
+    duration: number;
+    status: "draft" | "active" | "paused" | "ended";
+    problemIds: { _id: string; title: string; difficulty: string }[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OUTER GATE — shows UserDashboard until a contest is joined, then renders game
+// ─────────────────────────────────────────────────────────────────────────────
+export default function App() {
+    const [contestInfo, setContestInfo] = useState<ContestInfo | null>(null);
+    const [joinedName, setJoinedName] = useState("");
+    const [joinedEnrollment, setJoinedEnrollment] = useState("");
+
+    if (!contestInfo) {
+        return (
+            <UserDashboard
+                onContestJoined={(_contestId, playerName, enrollment, info) => {
+                    setJoinedName(playerName);
+                    setJoinedEnrollment(enrollment);
+                    setContestInfo(info);
+                }}
+            />
+        );
+    }
+
+    return (
+        <ContestApp
+            contestInfo={contestInfo}
+            joinedName={joinedName}
+            joinedEnrollment={joinedEnrollment}
+            onExit={() => setContestInfo(null)}
+        />
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INNER GAME — your original App() logic, completely untouched except:
+//   • renamed to ContestApp
+//   • receives joinedName (pre-fills playerName)
+//   • handleLogout calls onExit() to go back to UserDashboard
+// ─────────────────────────────────────────────────────────────────────────────
 const SABOTAGE_CHARS = [";", "{", "}", "[", "]", "?", "!", "x", "=", ")", "(", "<", ">"];
 
-export default function App() {
-    const [isRegistered, setIsRegistered] = useState(false);
-    const [playerName, setPlayerName] = useState("");
-    const [_rollNumber, setRollNumber] = useState("");
+function ContestApp({
+    contestInfo,
+    joinedName,
+    joinedEnrollment,
+    onExit,
+}: {
+    contestInfo: ContestInfo;
+    joinedName: string;
+    joinedEnrollment: string;
+    onExit: () => void;
+}) {
+    const [playerName] = useState(joinedName);
+    const [_rollNumber] = useState(joinedEnrollment);
     const [code, setCode] = useState("");
     const [isBlurred, setIsBlurred] = useState(true);
     const [logs, setLogs] = useState<string[]>([]);
@@ -54,24 +110,33 @@ export default function App() {
         setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
     }, []);
 
+    // Start timer and log welcome on mount
     useEffect(() => {
-        if (!isRegistered) return;
+        setCode(currentChallenge.starterCode[language]);
+        setLevelStartTime(Date.now());
+        addLog(`✓ Welcome, ${playerName}! Contest: ${contestInfo.name}`);
+        addLog(`🎮 Level ${currentLevel}: ${currentChallenge.title}`);
+        addLog(`⏱️ Time limit: ${currentChallenge.timeLimit} seconds`);
+        addLog("👁️ Use Vision to peek, but beware of the sabotage...");
+    }, []);
+
+    useEffect(() => {
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
         }, 1000);
         return () => clearInterval(interval);
-    }, [isRegistered]);
+    }, []);
 
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (document.hidden && isRegistered) {
+            if (document.hidden) {
                 addLog("⚠️ TAB SWITCH DETECTED. +30s PENALTY.");
                 setTimer((prev) => prev + 30);
             }
         };
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [isRegistered, addLog]);
+    }, [addLog]);
 
     useEffect(() => {
         if (visionTimeLeft > 0) {
@@ -156,23 +221,7 @@ export default function App() {
         });
     };
 
-    const handleRegister = (name: string, roll: string) => {
-        setPlayerName(name);
-        setRollNumber(roll);
-        setIsRegistered(true);
-        setCode(currentChallenge.starterCode[language]);
-        setLevelStartTime(Date.now());
-
-        addLog(`✓ Welcome, ${name}! Game started.`);
-        addLog(`🎮 Level ${currentLevel}: ${currentChallenge.title}`);
-        addLog(`⏱️ Time limit: ${currentChallenge.timeLimit} seconds`);
-        addLog("👁️ Use Vision to peek, but beware of the sabotage...");
-    };
-
     const handleLogout = () => {
-        setIsRegistered(false);
-        setPlayerName("");
-        setRollNumber("");
         setCode("");
         setLogs([]);
         setTimer(0);
@@ -184,6 +233,7 @@ export default function App() {
         setShowGameComplete(false);
         setSubmissionData({ status: "idle", message: "" });
         setActiveSidebarTab("description");
+        onExit();
     };
 
     const handleCodeChange = (newCode: string) => {
@@ -235,6 +285,7 @@ export default function App() {
             setIsCompiling(false);
         }
     };
+
     const handleSubmit = async () => {
         if (isCompiling) return;
 
@@ -331,7 +382,6 @@ export default function App() {
         }
     };
 
-
     const handleNextLevel = () => {
         setShowLevelComplete(false);
         setCurrentLevel((prev) => prev + 1);
@@ -365,7 +415,6 @@ export default function App() {
 
     return (
         <div className="h-screen flex flex-row bg-[#1a1a1a] overflow-hidden">
-            {!isRegistered && <Registration onRegister={handleRegister} />}
 
             {showLevelComplete && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-8">
@@ -410,27 +459,23 @@ export default function App() {
             )}
 
             {/* Left Column: Problem Sidebar (Now wrapped for dynamic width) */}
-            {isRegistered && (
-                <div style={{ width: sidebarWidth }} className="shrink-0 flex flex-col relative h-full">
-                    <ProblemSidebar
-                        challenge={currentChallenge}
-                        activeTab={activeSidebarTab}
-                        onTabChange={setActiveSidebarTab}
-                        submission={submissionData}
-                        level={currentLevel}
-                    />
-                </div>
-            )}
+            <div style={{ width: sidebarWidth }} className="shrink-0 flex flex-col relative h-full">
+                <ProblemSidebar
+                    challenge={currentChallenge}
+                    activeTab={activeSidebarTab}
+                    onTabChange={setActiveSidebarTab}
+                    submission={submissionData}
+                    level={currentLevel}
+                />
+            </div>
 
             {/* Horizontal Resizer for Sidebar */}
-            {isRegistered && (
-                <div
-                    className="w-2 bg-[#252526] hover:bg-[#007acc] cursor-col-resize flex flex-col items-center justify-center shrink-0 transition-colors group z-50 border-r border-[#3c3c3c]"
+            <div
+                className="w-2 bg-[#252526] hover:bg-[#007acc] cursor-col-resize flex flex-col items-center justify-center shrink-0 transition-colors group z-50 border-r border-[#3c3c3c]"
                     onMouseDown={() => setIsDraggingSidebar(true)}
                 >
                     <div className="h-20 w-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
                 </div>
-            )}
 
             {/* Right Column: Editor and Terminal */}
             <div className="flex-1 flex flex-col min-w-0 h-full">
