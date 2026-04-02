@@ -3,23 +3,24 @@ import { useNavigate } from 'react-router-dom'
 import './Home.css'
 import { apiGetContests } from '../api'
 
-type ContestStatus = 'running' | 'ended' | 'draft' | 'paused'
+import { ContestStatusEnum } from '../types'
+
 
 interface Contest {
   _id: string
   contestCode: string
   name: string
-  status: ContestStatus
+  status: ContestStatusEnum
   duration: number
   createdAt: string
   problemIds: any[]
 }
 
-const statusLabel: Record<ContestStatus, string> = {
-  running: '● Live',
-  paused: '⏸ Paused',
-  ended: 'Ended',
-  draft: 'Draft',
+const statusLabel: Record<ContestStatusEnum, string> = {
+  [ContestStatusEnum.running]: '● Live',
+  [ContestStatusEnum.paused]: '⏸ Paused',
+  [ContestStatusEnum.ended]: 'Ended',
+  [ContestStatusEnum.draft]: 'Draft',
 }
 
 export default function Home() {

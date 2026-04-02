@@ -8,7 +8,7 @@ interface ContestInfo {
   contestCode: string;
   name: string;
   duration: number;
-  status: "draft" | "active" | "paused" | "ended";
+  status: "draft" | "running" | "paused" | "ended";
   problemIds: { _id: string; title: string; difficulty: string }[];
 }
 
@@ -42,7 +42,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     const poll = async () => {
       try {
         const data = await apiGetContestStatus(contest.contestCode);
-        if (data.status === "active") {
+        if (data.status === "running") {
           if (pollRef.current) clearInterval(pollRef.current);
           onContestJoined(contest._id, nameInput, enrollmentInput, contest);
         }
@@ -82,7 +82,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     setError("");
     try {
       await apiJoinContest(contest.contestCode, name, enrollment);
-      if (contest.status === "active") {
+      if (contest.status === "running") {
         onContestJoined(contest._id, name, enrollment, contest);
       } else {
         setScreen("waiting"); // draft or paused — wait for admin to start

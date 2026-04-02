@@ -13,7 +13,7 @@ export const apiGetContestByCode = async (contestCode: string) => {
     contestCode: string
     name: string
     duration: number
-    status: 'draft' | 'active' | 'paused' | 'ended'
+    status: 'draft' | 'running' | 'paused' | 'ended'
     problemIds: { _id: string; title: string; difficulty: string }[]
   }
 }
@@ -39,7 +39,7 @@ export const apiGetContestStatus = async (contestCode: string) => {
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message)
-  return data as { status: 'draft' | 'active' | 'paused' | 'ended' }
+  return data as { status: 'draft' | 'running' | 'paused' | 'ended' }
 }
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────

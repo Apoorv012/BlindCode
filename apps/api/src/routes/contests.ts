@@ -1,5 +1,5 @@
 import express from 'express'
-import Contest from '../models/Contest'
+import Contest, { ContestStatusEnum } from '../models/Contest'
 import Problem from '../models/Problem'
 import { protect, AuthRequest } from '../middleware/auth'
 import mongoose from 'mongoose'
@@ -23,7 +23,7 @@ router.get('/code/:contestCode', async (req, res) => {
       res.status(404).json({ message: 'Invalid contest code. Please check and try again.' })
       return
     }
-    if (contest.status === 'ended') {
+    if (contest.status === ContestStatusEnum.ended) {
       res.status(400).json({ message: 'This contest has already ended.' })
       return
     }
@@ -55,7 +55,7 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       ...req.body,
       adminId: req.adminId,
       contestCode,
-      status: 'draft'
+      status: ContestStatusEnum.draft
     })
     res.status(201).json(contest)
   } catch {
@@ -80,12 +80,12 @@ router.get('/:contestId', protect, async (req: AuthRequest, res) => {
   }
 })
 
-// POST /contests/:contestId/start — sets status to 'active' (user app polls for this)
+// POST /contests/:contestId/start — sets status to 'running' (user app polls for this)
 router.post('/:contestId/start', protect, async (req: AuthRequest, res) => {
   try {
     const contest = await Contest.findOneAndUpdate(
       { contestCode: req.params.contestId, adminId: req.adminId },
-      { status: 'active', startedAt: new Date() },
+      { status: ContestStatusEnum.running, startedAt: new Date() },
       { new: true }
     )
     if (!contest) {
@@ -109,7 +109,7 @@ router.post('/:contestId/pause', protect, async (req: AuthRequest, res) => {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    const newStatus = contest.status === 'active' ? 'paused' : 'active'
+    const newStatus = contest.status === ContestStatusEnum.running ? ContestStatusEnum.paused : ContestStatusEnum.running
     contest.status = newStatus
     await contest.save()
     res.json({ status: newStatus })
@@ -123,7 +123,7 @@ router.post('/:contestId/end', protect, async (req: AuthRequest, res) => {
   try {
     const contest = await Contest.findOneAndUpdate(
       { contestCode: req.params.contestId, adminId: req.adminId },
-      { status: 'ended', endedAt: new Date() },
+      { status: ContestStatusEnum.ended, endedAt: new Date() },
       { new: true }
     )
     if (!contest) {

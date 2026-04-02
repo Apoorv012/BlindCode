@@ -1,5 +1,5 @@
 import express from 'express'
-import Contest from '../models/Contest'
+import Contest, { ContestStatusEnum } from '../models/Contest'
 import { protect, AuthRequest } from '../middleware/auth'
 
 const router = express.Router({ mergeParams: true })
@@ -45,7 +45,7 @@ router.post('/join', async (req: express.Request<ContestParams>, res) => {
       return
     }
 
-    if (contest.status === 'ended') {
+    if (contest.status === ContestStatusEnum.ended) {
       res.status(400).json({ message: 'Contest has already ended' })
       return
     }

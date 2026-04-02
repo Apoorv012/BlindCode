@@ -15,7 +15,7 @@ export interface ContestInfo {
     contestCode: string;
     name: string;
     duration: number;
-    status: "draft" | "active" | "paused" | "ended";
+    status: "draft" | "running" | "paused" | "ended";
     problemIds: { _id: string; title: string; difficulty: string }[];
 }
 

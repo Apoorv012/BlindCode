@@ -1,5 +1,12 @@
 import mongoose from 'mongoose'
 
+export enum ContestStatusEnum {
+  running = 'running',
+  ended = 'ended',
+  draft = 'draft',
+  paused = 'paused'
+}
+
 const memberSchema = new mongoose.Schema({
   name: { type: String, required: true },
   enroll: { type: Number, required: true }
@@ -26,10 +33,11 @@ const contestSchema = new mongoose.Schema({
   duration: { type: Number, required: true },
   problemIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Problem' }],
   participants: [participantSchema],
+
   status: {
     type: String,
-    enum: ['draft', 'active', 'paused', 'ended'],
-    default: 'draft'
+    enum: Object.values(ContestStatusEnum),
+    default: ContestStatusEnum.draft
   },
   createdAt: { type: Date, default: Date.now },
   startedAt: Date,

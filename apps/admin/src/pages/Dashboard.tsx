@@ -7,8 +7,8 @@ import {
   apiRemoveProblemFromContest
 } from '../api'
 
+import { ContestStatusEnum } from '../types'
 type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline'
-type ContestState = 'running' | 'paused' | 'ended'
 type Tab = 'participants' | 'leaderboard' | 'controls'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
 
@@ -49,7 +49,7 @@ export default function Dashboard() {
 
   const [contestName, setContestName] = useState(nav?.name || '')
   const [contestDuration, setContestDuration] = useState(nav?.duration || 60)
-  const [contestState, setContestState] = useState<ContestState>('running')
+  const [contestState, setContestState] = useState<ContestStatusEnum>(ContestStatusEnum.running)
   const [contestProblems, setContestProblems] = useState<Problem[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
   const [tab, setTab] = useState<Tab>('participants')
@@ -93,7 +93,7 @@ export default function Dashboard() {
 
   // Countdown timer
   useEffect(() => {
-    if (contestState !== 'running') return
+    if (contestState !== ContestStatusEnum.running) return
     const interval = setInterval(() => setTimer(t => t > 0 ? t - 1 : 0), 1000)
     return () => clearInterval(interval)
   }, [contestState])
@@ -126,7 +126,11 @@ export default function Dashboard() {
     const name = newParticipantName.trim()
     if (!name) return
     try {
-      await apiAddParticipant(contestId!, name, true)
+      await apiAddParticipant(contestId!, { 
+        name, 
+        password: 'pass', 
+        members: [{ name, enroll: 0 }]
+      })
       setNewParticipantName('')
       setAddParticipantMsg(`Added ${name} successfully!`)
       setTimeout(() => setAddParticipantMsg(''), 3000)
@@ -177,7 +181,7 @@ export default function Dashboard() {
         </div>
         <div className="header-center">
           <div className={`contest-badge contest-${contestState}`}>
-            {contestState === 'running' && <span className="pulse-dot" />}
+            {contestState === ContestStatusEnum.running && <span className="pulse-dot" />}
             {contestState.toUpperCase()}
           </div>
           <div className="dash-timer">{formatTimer(timer)}</div>
@@ -294,12 +298,12 @@ export default function Dashboard() {
               <div className="control-card">
                 <div className="control-label">Contest Status</div>
                 <div className={`big-status contest-${contestState}`}>
-                  {contestState === 'running' && <span className="pulse-dot large" />}
+                  {contestState === ContestStatusEnum.running && <span className="pulse-dot large" />}
                   {contestState.toUpperCase()}
                 </div>
                 <div className="control-actions">
-                  <button className={`btn ${contestState === 'running' ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
-                    {contestState === 'running' ? 'Pause Contest' : 'Resume Contest'}
+                  <button className={`btn ${contestState === ContestStatusEnum.running ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
+                    {contestState === ContestStatusEnum.running ? 'Pause Contest' : 'Resume Contest'}
                   </button>
                   <button className="btn btn-end" onClick={handleEnd} disabled={ending}>
                     {ending ? 'Ending...' : 'End Contest'}
