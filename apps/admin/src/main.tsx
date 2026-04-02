@@ -23,7 +23,7 @@ import Dashboard from './pages/Dashboard.tsx'
 import Results from './pages/Results.tsx'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const isLoggedIn = localStorage.getItem('bc_admin_token')
+  const isLoggedIn = localStorage.getItem('bc_admin_token');
   return isLoggedIn ? <>{children}</> : <Navigate to="/login" replace />
 }
 createRoot(document.getElementById('root')!).render(

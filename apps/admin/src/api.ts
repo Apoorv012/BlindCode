@@ -124,10 +124,10 @@ export const apiAddParticipant = async (
   teamData: {
     name: string,
     password?: string,
-    members: {name: string, enroll: number}[],
+    members: { name: string, enroll: number }[],
   }
 ) => {
-  const res = await fetch(`${API_URL}/contests/${contestId}/participants`, {
+  const res = await fetch(`${API_URL}/contests/${contestId}`, {
     method: 'POST',
     headers: authHeader(),
     body: JSON.stringify(teamData)

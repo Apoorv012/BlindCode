@@ -8,7 +8,7 @@ export const ParticipantStatus = {
   Unjoined: 'unjoined',
   Online: 'online',
   Offline: 'offline'
-} as const
+} as const;
 
 export type ParticipantStatus = typeof ParticipantStatus[keyof typeof ParticipantStatus]
 
@@ -163,8 +163,8 @@ export default function ContestLobby() {
           const members = [{ name: m1Name, enroll: Number(m1Enroll) }]
           if (m2Name) {
             if (!m2Enroll || isNaN(Number(m2Enroll))) {
-               allFailures.push({ team: teamName, reason: 'Invalid or missing Enroll number for Member 2' })
-               continue
+              allFailures.push({ team: teamName, reason: 'Invalid or missing Enroll number for Member 2' })
+              continue
             }
             members.push({ name: m2Name, enroll: Number(m2Enroll) })
           }
@@ -176,34 +176,34 @@ export default function ContestLobby() {
           try {
             const { apiAddParticipantsBulk } = await import('../api')
             const response = await apiAddParticipantsBulk(contestId!, validTeams)
-            
+
             if (response.failed && Array.isArray(response.failed)) {
               allFailures.push(...response.failed)
             }
-            
+
             alert(`Upload Complete:\n${response.success?.length || 0} tags successful.\n${allFailures.length} failed.`)
           } catch (err: any) {
-             alert('Upload encountered a server error: ' + err.message)
+            alert('Upload encountered a server error: ' + err.message)
           }
         } else if (allFailures.length > 0) {
           alert(`Upload Failed:\n0 tags successful.\n${allFailures.length} failed.`)
         }
 
         if (allFailures.length > 0) {
-           console.table(allFailures)
-           const csvContent = Papa.unparse({
-             fields: ['team', 'reason'],
-             data: allFailures.map(f => [f.team, f.reason])
-           })
-           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-           const url = URL.createObjectURL(blob)
-           const link = document.createElement('a')
-           link.setAttribute('href', url)
-           link.setAttribute('download', 'failed_teams.csv')
-           link.style.display = 'none'
-           document.body.appendChild(link)
-           link.click()
-           document.body.removeChild(link)
+          console.table(allFailures)
+          const csvContent = Papa.unparse({
+            fields: ['team', 'reason'],
+            data: allFailures.map(f => [f.team, f.reason])
+          })
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.setAttribute('href', url)
+          link.setAttribute('download', 'failed_teams.csv')
+          link.style.display = 'none'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
         }
       }
     })
