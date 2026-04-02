@@ -200,6 +200,7 @@ export default function Dashboard() {
     <div className={`app ${theme}`}>
       <header className="header">
         <div className="header-left">
+          <button className="back-btn" onClick={() => navigate('/')}>← Home</button>
           <div className="logo-mark">BC</div>
           <div>
             <div className="logo-title">{contestName || 'Loading...'}</div>

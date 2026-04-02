@@ -89,6 +89,20 @@
 }
 .logout-btn:hover { border-color: #fc5c65; color: #fc5c65; }
 
+.back-btn { 
+  background: none; 
+  border: 1px solid var(--border); 
+  color: var(--text2); 
+  font-family: 'DM Sans', sans-serif; 
+  font-size: 13px; 
+  padding: 6px 14px; 
+  border-radius: 8px; 
+  cursor: pointer; 
+  transition: all 0.2s; 
+  white-space: nowrap; 
+}
+.back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 /* Nav */
 .nav {
   display: flex; align-items: center; gap: 4px;
