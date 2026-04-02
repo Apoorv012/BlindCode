@@ -126,9 +126,9 @@ export default function Dashboard() {
     const name = newParticipantName.trim()
     if (!name) return
     try {
-      await apiAddParticipant(contestId!, { 
-        name, 
-        password: 'pass', 
+      await apiAddParticipant(contestId!, {
+        name,
+        password: 'pass',
         members: [{ name, enroll: 0 }]
       })
       setNewParticipantName('')
