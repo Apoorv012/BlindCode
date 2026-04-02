@@ -20,11 +20,11 @@ export const apiGetContestByCode = async (contestCode: string) => {
 
 // ─── Join contest ─────────────────────────────────────────────────────────────
 
-export const apiJoinContest = async (contestCode: string, name: string, enrollment: string) => {
+export const apiJoinContest = async (contestCode: string, name: string, password?: string) => {
   const res = await fetch(`${API_URL}/contests/${contestCode}/join`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, enrollment, addedByAdmin: false })
+    body: JSON.stringify({ name, password })
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message || 'Failed to join contest')
@@ -46,7 +46,7 @@ export const apiGetContestStatus = async (contestCode: string) => {
 
 export interface ScorePayload {
   name: string
-  enrollment: string
+  password?: string
   score: number
   levelScores: { level: number; score: number; timeTaken: number; peeks: number }[]
 }
@@ -71,7 +71,7 @@ export const apiGetLeaderboard = async (contestCode: string) => {
   return data as {
     rank: number
     name: string
-    enrollment: string
+    password?: string
     score: number
     levelScores: { level: number; score: number; timeTaken: number; peeks: number }[]
   }[]

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Zap, ArrowRight, Loader2, AlertCircle, Users, Clock, BookOpen } from "lucide-react";
+import { Zap, ArrowRight, Loader2, AlertCircle, Users } from "lucide-react";
 import { apiGetContestByCode, apiJoinContest, apiGetContestStatus } from "../services/desktopApi";
 import "./UserDashboard.css";
 
@@ -13,16 +13,17 @@ interface ContestInfo {
 }
 
 interface UserDashboardProps {
-  onContestJoined: (contestId: string, playerName: string, enrollment: string, contestInfo: ContestInfo) => void;
+  onContestJoined: (contestId: string, playerName: string, password: string, contestInfo: ContestInfo) => void;
 }
 
-type Screen = "enter-code" | "enter-name" | "waiting";
+type Screen = "login" | "enter-code" | "waiting";
 
 export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
-  const [screen, setScreen] = useState<Screen>("enter-code");
+  const [screen, setScreen] = useState<Screen>("login");
+  const [teamName, setTeamName] = useState("");
+  const [password, setPassword] = useState("");
   const [codeInput, setCodeInput] = useState("");
-  const [nameInput, setNameInput] = useState("");
-  const [enrollmentInput, setEnrollmentInput] = useState("");
+  
   const [contest, setContest] = useState<ContestInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,7 +45,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
         const data = await apiGetContestStatus(contest.contestCode);
         if (data.status === "running") {
           if (pollRef.current) clearInterval(pollRef.current);
-          onContestJoined(contest._id, nameInput, enrollmentInput, contest);
+          onContestJoined(contest._id, teamName, password, contest);
         }
       } catch {}
     };
@@ -54,9 +55,15 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [screen, contest]);
 
+  const handleLoginSubmit = () => {
+    if (!teamName.trim() || !password.trim()) return;
+    setScreen("enter-code");
+    setError("");
+  };
+
   const handleCodeSubmit = async () => {
     const code = codeInput.trim().toUpperCase();
-    if (!code) return;
+    if (!code || !teamName || !password) return;
     setLoading(true);
     setError("");
     try {
@@ -66,39 +73,23 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
         return;
       }
       setContest(data);
-      setScreen("enter-name");
-    } catch (err: any) {
-      setError(err.message || "Invalid contest code.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNameSubmit = async () => {
-    const name = nameInput.trim();
-    const enrollment = enrollmentInput.trim();
-    if (!name || !enrollment || !contest) return;
-    setLoading(true);
-    setError("");
-    try {
-      await apiJoinContest(contest.contestCode, name, enrollment);
-      if (contest.status === "running") {
-        onContestJoined(contest._id, name, enrollment, contest);
+      
+      // Attempt to join the contest with team credentials
+      await apiJoinContest(code, teamName, password);
+      
+      if (data.status === "running") {
+        onContestJoined(data._id, teamName, password, data);
       } else {
         setScreen("waiting"); // draft or paused — wait for admin to start
       }
     } catch (err: any) {
-      setError(err.message || "Failed to join contest.");
+      setError(err.message || "Invalid contest code or credentials.");
     } finally {
       setLoading(false);
     }
   };
 
-  const diffColor = (d: string) => {
-    if (d === "Easy") return "diff-easy";
-    if (d === "Medium") return "diff-medium";
-    return "diff-hard";
-  };
+
 
   return (
     <div className="ud-root">
@@ -115,7 +106,50 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
           <span className="ud-logo-text">BLINDCODE</span>
         </div>
 
-        {/* ── Screen 1: Enter Code ── */}
+        {/* ── Screen 1: Login ── */}
+        {screen === "login" && (
+          <div className="ud-card ud-card-name">
+            <div className="ud-card-eyebrow">TEAM AUTHENTICATION</div>
+            <h1 className="ud-card-title">Login</h1>
+            <p className="ud-card-sub">Enter your team credentials to proceed</p>
+
+            <div className="ud-input-wrap">
+              <input
+                className={`ud-name-input ${error ? "ud-input-error" : ""}`}
+                value={teamName}
+                onChange={e => { setTeamName(e.target.value); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && password.trim() && handleLoginSubmit()}
+                placeholder="Team Name"
+                autoFocus
+              />
+              <input
+                type="password"
+                className={`ud-name-input ${error ? "ud-input-error" : ""}`}
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && teamName.trim() && handleLoginSubmit()}
+                placeholder="Password"
+                style={{ marginTop: 8 }}
+              />
+              {error && (
+                <div className="ud-error">
+                  <AlertCircle size={14} />
+                  <span>{error}</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              className={`ud-btn ${!teamName.trim() || !password.trim() ? "ud-btn-disabled" : ""}`}
+              onClick={handleLoginSubmit}
+              disabled={!teamName.trim() || !password.trim()}
+            >
+              Next <ArrowRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* ── Screen 2: Enter Code ── */}
         {screen === "enter-code" && (
           <div className="ud-card ud-card-enter">
             <div className="ud-card-eyebrow">PARTICIPANT ACCESS</div>
@@ -141,88 +175,18 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
               )}
             </div>
 
-            <button
-              className={`ud-btn ${loading || !codeInput.trim() ? "ud-btn-disabled" : ""}`}
-              onClick={handleCodeSubmit}
-              disabled={loading || !codeInput.trim()}
-            >
-              {loading
-                ? <><Loader2 size={16} className="ud-spin" /> Checking...</>
-                : <> Verify Code <ArrowRight size={16} /></>
-              }
-            </button>
-          </div>
-        )}
-
-        {/* ── Screen 2: Enter Name ── */}
-        {screen === "enter-name" && contest && (
-          <div className="ud-card ud-card-name">
-            <div className="ud-contest-badge">
-              <span className="ud-contest-code-tag">{contest.contestCode}</span>
-              <span className="ud-contest-name-tag">{contest.name}</span>
-            </div>
-
-            <div className="ud-contest-meta">
-              <span className="ud-meta-chip">
-                <Clock size={12} />
-                {contest.duration} min
-              </span>
-              <span className="ud-meta-chip">
-                <BookOpen size={12} />
-                {contest.problemIds.length} problem{contest.problemIds.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-
-            <div className="ud-problems-preview">
-              {contest.problemIds.map((p, i) => (
-                <div key={p._id} className="ud-problem-row">
-                  <span className="ud-problem-num">{i + 1}</span>
-                  <span className="ud-problem-title">{p.title}</span>
-                  <span className={`ud-diff ${diffColor(p.difficulty)}`}>{p.difficulty}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="ud-divider" />
-
-            <div className="ud-card-eyebrow">YOUR DETAILS</div>
-            <div className="ud-input-wrap">
-              <input
-                className={`ud-name-input ${error ? "ud-input-error" : ""}`}
-                value={nameInput}
-                onChange={e => { setNameInput(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && enrollmentInput.trim() && handleNameSubmit()}
-                placeholder="Enter your name..."
-                autoFocus
-              />
-              <input
-                className={`ud-name-input ${error ? "ud-input-error" : ""}`}
-                value={enrollmentInput}
-                onChange={e => { setEnrollmentInput(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && nameInput.trim() && handleNameSubmit()}
-                placeholder="Enrollment number..."
-                style={{ marginTop: 8 }}
-              />
-              {error && (
-                <div className="ud-error">
-                  <AlertCircle size={14} />
-                  <span>{error}</span>
-                </div>
-              )}
-            </div>
-
             <div className="ud-btn-row">
-              <button className="ud-btn-ghost" onClick={() => { setScreen("enter-code"); setError(""); }}>
+              <button className="ud-btn-ghost" onClick={() => { setScreen("login"); setError(""); }}>
                 ← Back
               </button>
               <button
-                className={`ud-btn ${loading || !nameInput.trim() || !enrollmentInput.trim() ? "ud-btn-disabled" : ""}`}
-                onClick={handleNameSubmit}
-                disabled={loading || !nameInput.trim() || !enrollmentInput.trim()}
+                className={`ud-btn ${loading || !codeInput.trim() ? "ud-btn-disabled" : ""}`}
+                onClick={handleCodeSubmit}
+                disabled={loading || !codeInput.trim()}
               >
                 {loading
                   ? <><Loader2 size={16} className="ud-spin" /> Joining...</>
-                  : <>Join Contest <ArrowRight size={16} /></>
+                  : <> Verify Code <ArrowRight size={16} /></>
                 }
               </button>
             </div>
@@ -237,7 +201,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
             </div>
 
             <h2 className="ud-waiting-title">You're In!</h2>
-            <p className="ud-waiting-name">{nameInput}</p>
+            <p className="ud-waiting-name">{teamName}</p>
 
             <div className="ud-waiting-contest">
               <span className="ud-contest-code-tag">{contest.contestCode}</span>

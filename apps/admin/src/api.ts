@@ -125,13 +125,12 @@ export const apiAddParticipant = async (
     name: string,
     password?: string,
     members: {name: string, enroll: number}[],
-    addedByAdmin?: boolean
   }
 ) => {
-  const res = await fetch(`${API_URL}/contests/${contestId}/join`, {
+  const res = await fetch(`${API_URL}/contests/${contestId}/participants`, {
     method: 'POST',
     headers: authHeader(),
-    body: JSON.stringify({ ...teamData, addedByAdmin: true })
+    body: JSON.stringify(teamData)
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message)

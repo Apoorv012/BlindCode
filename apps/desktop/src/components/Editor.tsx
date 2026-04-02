@@ -12,7 +12,7 @@ interface EditorProps {
     onPartialVision: (cost: number, text: string) => void;
     level: number;
     visionTimeLeft: number;
-    playerName: string;
+    teamName: string;
     language: string;
     onLanguageChange: (lang: string) => void;
     isCompiling: boolean;
@@ -32,7 +32,7 @@ export default function Editor({
     onPartialVision,
     level,
     visionTimeLeft,
-    playerName,
+    teamName,
     language,
     onLanguageChange,
     isCompiling,
@@ -119,7 +119,7 @@ export default function Editor({
                         <X size={14} className="text-[#858585] hover:text-white cursor-pointer ml-1" />
                     </div>
 
-                    <span className="text-[#858585] text-sm">{playerName} • Level {level}</span>
+                    <span className="text-[#858585] text-sm">{teamName} • Level {level}</span>
                 </div>
 
                 <div className="flex items-center gap-4">

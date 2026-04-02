@@ -24,15 +24,15 @@ export interface ContestInfo {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
     const [contestInfo, setContestInfo] = useState<ContestInfo | null>(null);
-    const [joinedName, setJoinedName] = useState("");
-    const [joinedEnrollment, setJoinedEnrollment] = useState("");
+    const [joinedTeamName, setJoinedTeamName] = useState("");
+    const [joinedPassword, setJoinedPassword] = useState("");
 
     if (!contestInfo) {
         return (
             <UserDashboard
-                onContestJoined={(_contestId, playerName, enrollment, info) => {
-                    setJoinedName(playerName);
-                    setJoinedEnrollment(enrollment);
+                onContestJoined={(_contestId, teamName, password, info) => {
+                    setJoinedTeamName(teamName);
+                    setJoinedPassword(password);
                     setContestInfo(info);
                 }}
             />
@@ -42,8 +42,8 @@ export default function App() {
     return (
         <ContestApp
             contestInfo={contestInfo}
-            joinedName={joinedName}
-            joinedEnrollment={joinedEnrollment}
+            joinedTeamName={joinedTeamName}
+            joinedPassword={joinedPassword}
             onExit={() => setContestInfo(null)}
         />
     );
@@ -52,24 +52,24 @@ export default function App() {
 // ─────────────────────────────────────────────────────────────────────────────
 // INNER GAME — your original App() logic, completely untouched except:
 //   • renamed to ContestApp
-//   • receives joinedName (pre-fills playerName)
+//   • receives joinedTeamName (pre-fills teamName)
 //   • handleLogout calls onExit() to go back to UserDashboard
 // ─────────────────────────────────────────────────────────────────────────────
 const SABOTAGE_CHARS = [";", "{", "}", "[", "]", "?", "!", "x", "=", ")", "(", "<", ">"];
 
 function ContestApp({
     contestInfo,
-    joinedName,
-    joinedEnrollment,
+    joinedTeamName,
+    joinedPassword,
     onExit,
 }: {
     contestInfo: ContestInfo;
-    joinedName: string;
-    joinedEnrollment: string;
+    joinedTeamName: string;
+    joinedPassword: string;
     onExit: () => void;
 }) {
-    const [playerName] = useState(joinedName);
-    const [_rollNumber] = useState(joinedEnrollment);
+    const [teamName] = useState(joinedTeamName);
+    const [_password] = useState(joinedPassword);
     const [code, setCode] = useState("");
     const [isBlurred, setIsBlurred] = useState(true);
     const [logs, setLogs] = useState<string[]>([]);
@@ -114,7 +114,7 @@ function ContestApp({
     useEffect(() => {
         setCode(currentChallenge.starterCode[language]);
         setLevelStartTime(Date.now());
-        addLog(`✓ Welcome, ${playerName}! Contest: ${contestInfo.name}`);
+        addLog(`✓ Welcome, Team ${teamName}! Contest: ${contestInfo.name}`);
         addLog(`🎮 Level ${currentLevel}: ${currentChallenge.title}`);
         addLog(`⏱️ Time limit: ${currentChallenge.timeLimit} seconds`);
         addLog("👁️ Use Vision to peek, but beware of the sabotage...");
@@ -472,10 +472,10 @@ function ContestApp({
             {/* Horizontal Resizer for Sidebar */}
             <div
                 className="w-2 bg-[#252526] hover:bg-[#007acc] cursor-col-resize flex flex-col items-center justify-center shrink-0 transition-colors group z-50 border-r border-[#3c3c3c]"
-                    onMouseDown={() => setIsDraggingSidebar(true)}
-                >
-                    <div className="h-20 w-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
-                </div>
+                onMouseDown={() => setIsDraggingSidebar(true)}
+            >
+                <div className="h-20 w-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
+            </div>
 
             {/* Right Column: Editor and Terminal */}
             <div className="flex-1 flex flex-col min-w-0 h-full">
@@ -488,8 +488,8 @@ function ContestApp({
                         </div>
                         <div className="h-8 w-px bg-[#3c3c3c]" />
                         <div className="flex items-center gap-3">
-                            <span className="text-[#858585] text-base">Player:</span>
-                            <span className="text-white font-semibold text-base">{playerName || "—"}</span>
+                            <span className="text-[#858585] text-base">Team:</span>
+                            <span className="text-white font-semibold text-base">{teamName || "—"}</span>
                         </div>
                     </div>
 
@@ -528,7 +528,7 @@ function ContestApp({
                             onVision={handleVision}
                             level={currentLevel}
                             visionTimeLeft={visionTimeLeft}
-                            playerName={playerName}
+                            teamName={teamName}
                             language={language}
                             onLanguageChange={handleLanguageChange}
                             isCompiling={isCompiling}

@@ -28,11 +28,11 @@ router.get('/participants', protect, async (req: AuthRequest, res) => {
   }
 })
 
-// POST /join (Public or Admin)
+// POST /join (Public User Login)
 router.post('/join', async (req: express.Request<ContestParams>, res) => {
   try {
     const { contestId } = req.params
-    const { name, password, members, addedByAdmin } = req.body
+    const { name, password } = req.body
 
     if (!name || !name.trim()) {
       res.status(400).json({ message: 'Team name is required' })
@@ -51,47 +51,66 @@ router.post('/join', async (req: express.Request<ContestParams>, res) => {
     }
 
     const teamName = name.trim().toLowerCase()
-    
+
     // Check for duplicate team name in same contest (case-insensitive)
     const existing = contest.participants.find((p: any) => p.name.toLowerCase() === teamName)
-    
-    // If it's an existing participant joining the lobby, check credentials
-    if (existing && !addedByAdmin) {
-      if (existing.password !== password) {
-        res.status(401).json({ message: 'Invalid password' })
-        return
-      }
-      
-      // Update status to online
-      await Contest.updateOne(
-        { contestCode: contestId, 'participants._id': existing._id },
-        { $set: { 'participants.$.status': 'online' } }
-      )
 
-      res.status(200).json({
-        participantId: existing._id,
-        name: existing.name,
-        joinedAt: existing.joinedAt
-      })
+    if (!existing) {
+      res.status(400).json({ message: 'Team not found in this contest. Make sure your instructor added you and check for typos.' })
       return
     }
 
-    if (existing && addedByAdmin) {
+    if (existing.password !== password) {
+      res.status(401).json({ message: 'Invalid password' })
+      return
+    }
+
+    // Update status to online
+    await Contest.updateOne(
+      { contestCode: contestId, 'participants._id': existing._id },
+      { $set: { 'participants.$.status': 'online' } }
+    )
+
+    res.status(200).json({
+      participantId: existing._id,
+      name: existing.name,
+      joinedAt: existing.joinedAt
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// POST / (Admin add single team)
+router.post('/', protect, async (req: AuthRequest & express.Request<ContestParams>, res) => {
+  try {
+    const { contestId } = req.params
+    const { name, password, members } = req.body
+
+    if (!name || !name.trim()) {
+      res.status(400).json({ message: 'Team name is required' })
+      return
+    }
+
+    const contest = await Contest.findOne({ contestCode: contestId, adminId: req.adminId })
+    if (!contest) {
+      res.status(404).json({ message: 'Contest not found' })
+      return
+    }
+
+    const teamName = name.trim().toLowerCase()
+    const existing = contest.participants.find((p: any) => p.name.toLowerCase() === teamName)
+
+    if (existing) {
       res.status(400).json({ message: 'Team already exists' })
       return
-    }
-
-    // New Team registration by Admin
-    if (!addedByAdmin) {
-       res.status(400).json({ message: 'Only admin can create teams.' })
-       return
     }
 
     const newParticipant = {
       name: name.trim(),
       password: password,
       members: members || [],
-      addedByAdmin: true,
       status: 'unjoined'
     }
 
@@ -138,7 +157,7 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
     const created: any[] = []
     const success: { team: string }[] = []
     const failed: { team: string; reason: string }[] = []
-    
+
     for (const t of teams) {
       if (!t.name || !t.password || !t.members || t.members.length === 0) {
         failed.push({ team: String(t.name || 'Unknown'), reason: 'Missing required fields' })
@@ -147,7 +166,7 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
 
       const teamName = String(t.name).trim()
       const existing = contest.participants.find((p: any) => p.name.toLowerCase() === teamName.toLowerCase())
-      
+
       if (existing) {
         failed.push({ team: teamName, reason: 'Team already exists' })
         continue
@@ -157,10 +176,9 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
         name: teamName,
         password: t.password,
         members: t.members,
-        addedByAdmin: true,
         status: 'unjoined'
       }
-      
+
       created.push(newParticipant)
       contest.participants.push(newParticipant as any) // update local ref
       success.push({ team: teamName })
