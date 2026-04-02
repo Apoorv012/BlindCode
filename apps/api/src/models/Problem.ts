@@ -13,7 +13,8 @@ const problemSchema = new mongoose.Schema({
   testCases: [{
     input: String,
     expected: String,
-    explanation: String
+    explanation: String,
+    hidden: { type: Boolean, default: false }
   }],
   createdAt: { type: Date, default: Date.now }
 })

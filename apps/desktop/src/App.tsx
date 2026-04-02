@@ -278,31 +278,37 @@ function ContestApp({
         return Math.max(0, baseScore + timeBonus - peekPenalty);
     };
 
-    // JUST FOR TESTING - Prints output to Terminal
+    // Run only visible test cases
     const handleRun = async () => {
-        if (isCompiling) return;
+        if (isCompiling || !currentChallenge) return;
         setIsCompiling(true);
-        addLog("🔄 Compiling...");
+
+        const visibleCases = currentChallenge.testCases.filter(tc => !tc.hidden);
+        addLog(`🔄 Running ${visibleCases.length} visible test case${visibleCases.length !== 1 ? 's' : ''}...`);
 
         try {
-            const result = await compileCode(code, language);
+            for (let i = 0; i < visibleCases.length; i++) {
+                const tc = visibleCases[i];
+                addLog(`⏳ Case ${i + 1}: input="${tc.input || '(empty)'}"`);
 
-            if (result.error) {
-                addLog(`❌ Error: ${result.error}`);
-                return;
+                const result = await compileCode(code, language, tc.input);
+
+                if (result.error || result.hasError) {
+                    addLog(`❌ Case ${i + 1} — Error: ${result.error || result.output}`);
+                    break;
+                }
+
+                const actual = result.output.trim();
+                const expected = tc.expected.trim();
+                if (actual === expected) {
+                    addLog(`✅ Case ${i + 1} Passed — Output: "${actual}"`);
+                } else {
+                    addLog(`❌ Case ${i + 1} Failed`);
+                    addLog(`   Expected: "${expected}"`);
+                    addLog(`   Got:      "${actual}"`);
+                }
             }
-
-            addLog("▶️ Execution started...");
-            addLog("━━━━━━━━━━━━━━━━ Output ━━━━━━━━━━━━━━━━");
-            const outputLines = result.output.split("\n");
-            outputLines.forEach((line: string) => {
-                if (line.trim()) addLog(`   ${line}`);
-            });
             addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-            if (result.hasError) {
-                addLog(`❌ Compilation/Runtime error - check your code.`);
-            }
         } catch (error) {
             addLog("❌ Failed to connect to compiler service");
             console.error(error);
@@ -319,29 +325,31 @@ function ContestApp({
         setSubmissionData({ status: "idle", message: "Evaluating your code..." });
         addLog("🚀 Submitting code for evaluation...");
 
-        const testCases = currentChallenge.testCases || [];
+        // Submit runs ALL test cases (visible + hidden)
+        const allTestCases = currentChallenge?.testCases || [];
         let allPassed = true;
         let passedCount = 0;
-        const testResults = []; // NAYA: Sab test cases ka result store karenge
+        const testResults = [];
 
         try {
-            for (let i = 0; i < testCases.length; i++) {
-                const tc = testCases[i];
-                addLog(`⏳ Running Test Case ${i + 1}/${testCases.length}...`);
+            for (let i = 0; i < allTestCases.length; i++) {
+                const tc = allTestCases[i];
+                const label = tc.hidden ? `Hidden Case ${i + 1}` : `Case ${i + 1}`;
+                addLog(`⏳ Running ${label}/${allTestCases.length}...`);
 
-                // Har test case ke liye input bhej kar code run karna
                 const result = await compileCode(code, language, tc.input);
 
                 if (result.error || result.hasError) {
                     allPassed = false;
                     testResults.push({
-                        input: tc.input,
-                        expected: tc.expected,
+                        input: tc.hidden ? '(hidden)' : tc.input,
+                        expected: tc.hidden ? '(hidden)' : tc.expected,
                         actual: result.output || result.error || "Runtime Error",
-                        status: "error"
+                        status: "error",
+                        hidden: tc.hidden
                     });
-                    addLog(`❌ Test Case ${i + 1} Failed: Compilation/Runtime Error.`);
-                    break; // Error aane par aage ke tests run mat karo
+                    addLog(`❌ ${label} Failed: Compilation/Runtime Error.`);
+                    break;
                 }
 
                 const actualOutput = result.output.trim();
@@ -350,15 +358,23 @@ function ContestApp({
                 if (actualOutput === expectedOutput) {
                     passedCount++;
                     testResults.push({
-                        input: tc.input, expected: tc.expected, actual: actualOutput, status: "passed"
+                        input: tc.hidden ? '(hidden)' : tc.input,
+                        expected: tc.hidden ? '(hidden)' : tc.expected,
+                        actual: actualOutput,
+                        status: "passed",
+                        hidden: tc.hidden
                     });
-                    addLog(`✅ Test Case ${i + 1} Passed`);
+                    addLog(`✅ ${label} Passed`);
                 } else {
                     allPassed = false;
                     testResults.push({
-                        input: tc.input, expected: tc.expected, actual: actualOutput, status: "failed"
+                        input: tc.hidden ? '(hidden)' : tc.input,
+                        expected: tc.hidden ? '(hidden)' : tc.expected,
+                        actual: tc.hidden ? '(hidden)' : actualOutput,
+                        status: "failed",
+                        hidden: tc.hidden
                     });
-                    addLog(`❌ Test Case ${i + 1} Failed: Wrong Answer.`);
+                    addLog(`❌ ${label} Failed: Wrong Answer.`);
                 }
             }
 
@@ -377,7 +393,7 @@ function ContestApp({
                     peeks: peekCount,
                     testResults: testResults,
                     passedCount,
-                    totalCount: testCases.length
+                    totalCount: allTestCases.length
                 } as any); // "as any" temporary hai Phase 3 tak
 
                 addLog(`✅ SUBMISSION ACCEPTED: +${levelScore} pts`);
@@ -392,10 +408,10 @@ function ContestApp({
             } else {
                 setSubmissionData({
                     status: "rejected",
-                    message: `Passed ${passedCount} out of ${testCases.length} test cases.`,
+                    message: `Passed ${passedCount} out of ${allTestCases.length} test cases.`,
                     testResults: testResults,
                     passedCount,
-                    totalCount: testCases.length
+                    totalCount: allTestCases.length
                 } as any);
                 addLog(`❌ SUBMISSION REJECTED: Failed some test cases.`);
             }

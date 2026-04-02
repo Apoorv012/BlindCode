@@ -103,9 +103,10 @@ export const apiGetProblem = async (problemId: string): Promise<Challenge> => {
     timeLimit: 300, // default 5 minutes; DB doesn't store timeLimit
     difficulty: (data.difficulty?.toLowerCase() ?? 'medium') as Challenge['difficulty'],
     starterCode: STARTER_CODE,
-    testCases: (data.testCases ?? []).map((tc: { input: string; expected: string }) => ({
+    testCases: (data.testCases ?? []).map((tc: { input: string; expected: string; hidden?: boolean }) => ({
       input: tc.input ?? '',
       expected: tc.expected ?? '',
+      hidden: tc.hidden ?? false,
     })),
     inputFormat: data.inputFormat,
     outputFormat: data.outputFormat,

@@ -1,6 +1,7 @@
 export interface TestCase {
     input: string;
     expected: string;
+    hidden: boolean;
 }
 
 export interface Challenge {
@@ -27,9 +28,9 @@ export const CHALLENGES: Challenge[] = [
         timeLimit: 120,
         difficulty: "easy",
         testCases: [
-            { input: "", expected: "Hello, World!" },
-            { input: "ignore me", expected: "Hello, World!" },
-            { input: "123", expected: "Hello, World!" }
+            { input: "", expected: "Hello, World!", hidden: false },
+            { input: "ignore me", expected: "Hello, World!", hidden: false },
+            { input: "123", expected: "Hello, World!", hidden: false }
         ],
         starterCode: {
             cpp: `#include <iostream>
@@ -54,9 +55,9 @@ int main() {
         timeLimit: 180,
         difficulty: "easy",
         testCases: [
-            { input: "10 20", expected: "30" },
-            { input: "50 50", expected: "100" },
-            { input: "-5 15", expected: "10" }
+            { input: "10 20", expected: "30", hidden: false },
+            { input: "50 50", expected: "100", hidden: false },
+            { input: "-5 15", expected: "10", hidden: false }
         ],
         starterCode: {
             cpp: `#include <iostream>
@@ -99,9 +100,9 @@ if (input.length >= 2) {
         timeLimit: 240,
         difficulty: "medium",
         testCases: [
-            { input: "5", expected: "5\n4\n3\n2\n1" },
-            { input: "3", expected: "3\n2\n1" },
-            { input: "1", expected: "1" }
+            { input: "5", expected: "5\n4\n3\n2\n1", hidden: false },
+            { input: "3", expected: "3\n2\n1", hidden: false },
+            { input: "1", expected: "1", hidden: false }
         ],
         starterCode: {
             cpp: `#include <iostream>
@@ -139,10 +140,10 @@ if (input[0]) {
         timeLimit: 300,
         difficulty: "medium",
         testCases: [
-            { input: "5", expected: "120" },
-            { input: "3", expected: "6" },
-            { input: "0", expected: "1" },
-            { input: "6", expected: "720" }
+            { input: "5", expected: "120", hidden: false },
+            { input: "3", expected: "6", hidden: false },
+            { input: "0", expected: "1", hidden: false },
+            { input: "6", expected: "720", hidden: false }
         ],
         starterCode: {
             cpp: `#include <iostream>
@@ -180,10 +181,10 @@ if (input[0]) {
         timeLimit: 300,
         difficulty: "hard",
         testCases: [
-            { input: "15", expected: "FizzBuzz" },
-            { input: "9", expected: "Fizz" },
-            { input: "10", expected: "Buzz" },
-            { input: "7", expected: "7" }
+            { input: "15", expected: "FizzBuzz", hidden: false },
+            { input: "9", expected: "Fizz", hidden: false },
+            { input: "10", expected: "Buzz", hidden: false },
+            { input: "7", expected: "7", hidden: false }
         ],
         starterCode: {
             cpp: `#include <iostream>
