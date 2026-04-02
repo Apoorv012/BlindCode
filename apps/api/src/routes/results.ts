@@ -59,11 +59,17 @@ router.get('/results', protect, async (req: AuthRequest & express.Request, res) 
         totalReveals: p.reveals,
         totalWrong: p.wrongSubmissions,
         status: p.status,
+        lastActive: p.lastActive,
         problemResults
       }
     })
 
-    results.sort((a, b) => b.totalScore - a.totalScore)
+    results.sort((a, b) => {
+        if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+        const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+        const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+        return timeA - timeB;
+    });
     const ranked = results.map((r, i) => ({ ...r, rank: i + 1 }))
 
     res.json({

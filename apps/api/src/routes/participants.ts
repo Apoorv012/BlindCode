@@ -56,7 +56,14 @@ router.get('/leaderboard', async (req: express.Request<ContestParams>, res) => {
         currentProblemId: p.currentProblemId,
         solvedProblemIds: p.solvedProblemIds || [] // Ensures the UI spheres work
       }))
-      .sort((a, b) => b.score - a.score) // Sort by score descending
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score // Sort by score descending
+        
+        // Tie-breaker: earlier lastActive is better (meaning they finished first)
+        const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+        const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+        return timeA - timeB;
+      })
 
     res.status(200).json(safeLeaderboard)
   } catch (error) {
@@ -320,10 +327,11 @@ router.post('/participants/:participantId/submit', async (req: express.Request<{
       baseScore = diffLower === "easy" ? 100 : diffLower === "medium" ? 200 : 300;
     }
 
-    const timeBonus = Math.max(0, Math.floor((timeLimit - timeTaken) * 0.5));
+    // Remove time bonus to ensure points exactly match the question configuration
+    // const timeBonus = Math.max(0, Math.floor((timeLimit - timeTaken) * 0.5));
     const peekPenalty = peeks * 20;
     // Don't let penalties reduce score below 0 for a correct submission
-    const levelScore = Math.max(0, baseScore + timeBonus - peekPenalty);
+    const levelScore = Math.max(0, baseScore - peekPenalty);
 
     participant.score += levelScore;
     participant.status = 'submitted';
