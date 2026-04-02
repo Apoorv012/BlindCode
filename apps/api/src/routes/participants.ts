@@ -135,15 +135,23 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
       return
     }
 
-    const created = []
+    const created: any[] = []
+    const success: { team: string }[] = []
+    const failed: { team: string; reason: string }[] = []
     
     for (const t of teams) {
-      if (!t.name || !t.password || !t.members || t.members.length === 0) continue
+      if (!t.name || !t.password || !t.members || t.members.length === 0) {
+        failed.push({ team: String(t.name || 'Unknown'), reason: 'Missing required fields' })
+        continue
+      }
 
       const teamName = String(t.name).trim()
       const existing = contest.participants.find((p: any) => p.name.toLowerCase() === teamName.toLowerCase())
       
-      if (existing) continue
+      if (existing) {
+        failed.push({ team: teamName, reason: 'Team already exists' })
+        continue
+      }
 
       const newParticipant = {
         name: teamName,
@@ -155,6 +163,7 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
       
       created.push(newParticipant)
       contest.participants.push(newParticipant as any) // update local ref
+      success.push({ team: teamName })
     }
 
     if (created.length > 0) {
@@ -164,7 +173,7 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
       )
     }
 
-    res.status(201).json({ message: `Successfully added ${created.length} teams`, count: created.length })
+    res.status(201).json({ success, failed })
   } catch (error) {
     console.error(error)
     res.status(500).json({ message: 'Server error' })

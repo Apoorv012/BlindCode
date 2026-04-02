@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import Papa from 'papaparse'
 import './ContestLobby.css'
 import { apiGetContest, apiGetParticipants, apiAddParticipant, apiStartContest } from '../api'
 
@@ -92,13 +93,13 @@ export default function ContestLobby() {
 
   const handleCreateTeam = async () => {
     setManualError('')
-    const validMembers = teamForm.members.filter(m => m.name.trim() && m.enroll)
+    const validMembers = teamForm.members.filter((m: any) => m.name.trim() && m.enroll)
     if (!teamForm.name || validMembers.length === 0 || !teamForm.password) {
       setManualError('Please fill all required fields (Team Name, at least 1 Member Name/Enroll, Password)')
       return
     }
     try {
-      const payloadMembers = validMembers.map(m => ({
+      const payloadMembers = validMembers.map((m: any) => ({
         name: m.name,
         enroll: Number(m.enroll)
       }))
@@ -119,50 +120,93 @@ export default function ContestLobby() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split('\n').map(l => l.trim());
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase(),
+      complete: async (results) => {
+        const allFailures: { team: string, reason: string }[] = []
+        const validTeams: any[] = []
+        const seenNames = new Set<string>()
 
-        // Find indices
-        const getIdx = (keywords: string[]) => headers.findIndex(h => keywords.some(kw => h.includes(kw)))
-        const idxName = getIdx(['team'])
-        const idxM1 = getIdx(['member 1', 'member1'])
-        const idxE1 = getIdx(['enroll 1', 'enroll1', 'enroll'])
-        // Assumes enroll 1 is the first enroll match, we should find enroll 2 explicitly
-        const idxM2 = getIdx(['member 2', 'member2'])
-        const idxE2 = getIdx(['enroll 2', 'enroll2'])
-        const idxPass = getIdx(['pass'])
+        for (const row of results.data as Record<string, string>[]) {
+          const teamName = (row['team name'] || row['team'] || '').trim()
+          const m1Name = (row['member 1 name'] || row['member 1'] || row['member1'] || '').trim()
+          const m1Enroll = (row['enroll 1'] || row['enroll1'] || '').trim()
+          const m2Name = (row['member 2 name'] || row['member 2'] || row['member2'] || '').trim()
+          const m2Enroll = (row['enroll 2'] || row['enroll2'] || '').trim()
+          const password = (row['password'] || row['pass'] || '').trim()
 
-        if (idxName === -1 || idxM1 === -1 || idxE1 === -1 || idxPass === -1) {
-          alert('CSV missing required headers. Expected: Team Name, Member 1 Name, Enroll 1, Member 2 Name, Enroll 2, Password')
-          return
-        }
-
-        const teams = lines.slice(1).map(line => {
-          const cols = line.split(',').map(c => c.trim())
-          const members = []
-          if (cols[idxM1] && cols[idxE1]) members.push({ name: cols[idxM1], enroll: Number(cols[idxE1]) })
-          if (idxM2 !== -1 && idxE2 !== -1 && cols[idxM2] && cols[idxE2]) members.push({ name: cols[idxM2], enroll: Number(cols[idxE2]) })
-
-          return {
-            name: cols[idxName],
-            members,
-            password: cols[idxPass]
+          if (!teamName) {
+            allFailures.push({ team: 'Unknown', reason: 'Missing team name' })
+            continue
           }
-        }).filter(t => t.name && t.members.length > 0)
+          if (seenNames.has(teamName.toLowerCase())) {
+            allFailures.push({ team: teamName, reason: 'Duplicate team name in CSV' })
+            continue
+          }
+          seenNames.add(teamName.toLowerCase())
 
-        if (teams.length > 0) {
-          await import('../api').then(m => m.apiAddParticipantsBulk(contestId!, teams))
-          alert(`Uploaded ${teams.length} teams.`)
+          if (!password) {
+            allFailures.push({ team: teamName, reason: 'Missing password' })
+            continue
+          }
+          if (!m1Name || !m1Enroll) {
+            allFailures.push({ team: teamName, reason: 'Missing Member 1 Name or Enroll' })
+            continue
+          }
+          if (isNaN(Number(m1Enroll))) {
+            allFailures.push({ team: teamName, reason: 'Invalid Enroll number for Member 1' })
+            continue
+          }
+
+          const members = [{ name: m1Name, enroll: Number(m1Enroll) }]
+          if (m2Name) {
+            if (!m2Enroll || isNaN(Number(m2Enroll))) {
+               allFailures.push({ team: teamName, reason: 'Invalid or missing Enroll number for Member 2' })
+               continue
+            }
+            members.push({ name: m2Name, enroll: Number(m2Enroll) })
+          }
+
+          validTeams.push({ name: teamName, password, members })
         }
-      } catch (err: any) {
-        alert('Failed to parse CSV: ' + err.message)
+
+        if (validTeams.length > 0) {
+          try {
+            const { apiAddParticipantsBulk } = await import('../api')
+            const response = await apiAddParticipantsBulk(contestId!, validTeams)
+            
+            if (response.failed && Array.isArray(response.failed)) {
+              allFailures.push(...response.failed)
+            }
+            
+            alert(`Upload Complete:\n${response.success?.length || 0} tags successful.\n${allFailures.length} failed.`)
+          } catch (err: any) {
+             alert('Upload encountered a server error: ' + err.message)
+          }
+        } else if (allFailures.length > 0) {
+          alert(`Upload Failed:\n0 tags successful.\n${allFailures.length} failed.`)
+        }
+
+        if (allFailures.length > 0) {
+           console.table(allFailures)
+           const csvContent = Papa.unparse({
+             fields: ['team', 'reason'],
+             data: allFailures.map(f => [f.team, f.reason])
+           })
+           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+           const url = URL.createObjectURL(blob)
+           const link = document.createElement('a')
+           link.setAttribute('href', url)
+           link.setAttribute('download', 'failed_teams.csv')
+           link.style.display = 'none'
+           document.body.appendChild(link)
+           link.click()
+           document.body.removeChild(link)
+        }
       }
-    }
-    reader.readAsText(file)
+    })
     e.target.value = '' // reset input
   }
 
@@ -248,7 +292,7 @@ export default function ContestLobby() {
                     <div className="lobby-participant-info">
                       <span className="lobby-participant-name">{p.name || 'Team'}</span>
                       <span className="lobby-participant-mems">
-                        {p.members?.map(m => m.name).join(' & ')}
+                        {p.members?.map((m: any) => m.name).join(' & ')}
                       </span>
                     </div>
                     <div

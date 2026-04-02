@@ -6,7 +6,7 @@ const memberSchema = new mongoose.Schema({
 }, { _id: false })
 
 const participantSchema = new mongoose.Schema({
-  name: { type: String, required: true },
+  name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   members: [memberSchema],
   joinedAt: { type: Date, default: Date.now },
