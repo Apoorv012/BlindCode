@@ -9,11 +9,12 @@ interface ContestInfo {
   name: string;
   duration: number;
   status: "draft" | "running" | "paused" | "ended";
+  startedAt?: string;
   problemIds: { _id: string; title: string; difficulty: string }[];
 }
 
 interface UserDashboardProps {
-  onContestJoined: (contestId: string, playerName: string, password: string, contestInfo: ContestInfo) => void;
+  onContestJoined: (contestId: string, playerName: string, password: string, contestInfo: ContestInfo, participantId: string) => void;
 }
 
 type Screen = "login" | "enter-code" | "waiting";
@@ -23,6 +24,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
   const [teamName, setTeamName] = useState("");
   const [password, setPassword] = useState("");
   const [codeInput, setCodeInput] = useState("");
+  const [participantId, setParticipantId] = useState("");
   
   const [contest, setContest] = useState<ContestInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
         const data = await apiGetContestStatus(contest.contestCode);
         if (data.status === "running") {
           if (pollRef.current) clearInterval(pollRef.current);
-          onContestJoined(contest._id, teamName, password, contest);
+          onContestJoined(contest._id, teamName, password, contest, participantId);
         }
       } catch {}
     };
@@ -75,10 +77,12 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
       setContest(data);
       
       // Attempt to join the contest with team credentials
-      await apiJoinContest(code, teamName, password);
+      const joinData = await apiJoinContest(code, teamName, password);
+      const joinedParticipantId = joinData.participantId;
+      setParticipantId(joinedParticipantId);
       
       if (data.status === "running") {
-        onContestJoined(data._id, teamName, password, data);
+        onContestJoined(data._id, teamName, password, data, joinedParticipantId);
       } else {
         setScreen("waiting"); // draft or paused — wait for admin to start
       }

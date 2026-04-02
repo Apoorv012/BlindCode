@@ -12,7 +12,9 @@ import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 async function seed() {
-  const uri = process.env.MONGODB_URI
+  const ENV = process.env.ENV;
+  const uri = ENV === "LOCAL" ? process.env.MONGODB_URI_LOCAL : process.env.MONGODB_URI_CLOUD;
+
   if (!uri) {
     console.error('MONGODB_URI not set in .env')
     process.exit(1)

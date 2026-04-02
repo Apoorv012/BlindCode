@@ -45,7 +45,7 @@ export default function ProblemSidebar({ challenge, activeTab, onTabChange, subm
 
             {/* Tab Content Area */}
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                {activeTab === "description" ? (
+                {activeTab === "description" && (
                     <div className="flex flex-col gap-6">
                         {/* Title & Difficulty */}
                         <div>
@@ -135,7 +135,8 @@ export default function ProblemSidebar({ challenge, activeTab, onTabChange, subm
                             </div>
                         )}
                     </div>
-                ) : (
+                )}
+                {activeTab === "submissions" && (
                     // Submissions View
                     <div className="flex flex-col gap-4">
                         {submission.status === "idle" ? (

@@ -5,7 +5,7 @@ import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData } from "./components/ProblemSidebar";
 import { LogOut, Trophy, Target, Clock, Zap, Loader2 } from "lucide-react";
 import type { Challenge } from "./data/questions";
-import { apiGetProblem } from "./services/desktopApi";
+import { apiGetProblem, apiHeartbeat, apiSubmitScore } from "./services/desktopApi";
 import { compileCode } from "./services/api";
 import UserDashboard from "./pages/UserDashboard";
 import "./App.css";
@@ -17,6 +17,7 @@ export interface ContestInfo {
     name: string;
     duration: number;
     status: "draft" | "running" | "paused" | "ended";
+    startedAt?: string;
     problemIds: { _id: string; title: string; difficulty: string }[];
 }
 
@@ -27,14 +28,16 @@ export default function App() {
     const [contestInfo, setContestInfo] = useState<ContestInfo | null>(null);
     const [joinedTeamName, setJoinedTeamName] = useState("");
     const [joinedPassword, setJoinedPassword] = useState("");
+    const [participantId, setParticipantId] = useState("");
 
     if (!contestInfo) {
         return (
             <UserDashboard
-                onContestJoined={(_contestId, teamName, password, info) => {
+                onContestJoined={(_contestId, teamName, password, info, pId) => {
                     setJoinedTeamName(teamName);
                     setJoinedPassword(password);
                     setContestInfo(info);
+                    setParticipantId(pId);
                 }}
             />
         );
@@ -45,6 +48,7 @@ export default function App() {
             contestInfo={contestInfo}
             joinedTeamName={joinedTeamName}
             joinedPassword={joinedPassword}
+            participantId={participantId}
             onExit={() => setContestInfo(null)}
         />
     );
@@ -62,11 +66,13 @@ function ContestApp({
     contestInfo,
     joinedTeamName,
     joinedPassword,
+    participantId,
     onExit,
 }: {
     contestInfo: ContestInfo;
     joinedTeamName: string;
     joinedPassword: string;
+    participantId: string;
     onExit: () => void;
 }) {
     const [teamName] = useState(joinedTeamName);
@@ -80,6 +86,15 @@ function ContestApp({
     const [peekCount, setPeekCount] = useState(0);
     const [language, setLanguage] = useState("cpp");
     const [isCompiling, setIsCompiling] = useState(false);
+    const [contestTimeLeft, setContestTimeLeft] = useState(0);
+
+    // Heartbeat logic
+    const statusTracker = useRef({
+      status: 'idle',
+      compiles: 0,
+      wrongSubmissions: 0,
+      reveals: 0
+    });
 
     // Resizer States
     const [editorHeight, setEditorHeight] = useState(65);
@@ -105,6 +120,7 @@ function ContestApp({
 
     const handlePartialVision = (cost: number, text: string) => {
         setTimer(prev => prev + cost);
+        statusTracker.current.reveals += 1;
         addLog(`👁️ Partial Vision used! +${cost}s penalty.`);
         addLog(`   Revealed: "${text.substring(0, 20)}${text.length > 20 ? "..." : ""}"`);
     };
@@ -146,10 +162,48 @@ function ContestApp({
     }, [problemsLoading]);
 
     useEffect(() => {
+        let contestEndTime = contestInfo.startedAt ? new Date(contestInfo.startedAt).getTime() + (contestInfo.duration * 60000) : Date.now() + (contestInfo.duration * 60000);
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
+            setContestTimeLeft(Math.floor(Math.max(0, contestEndTime - Date.now()) / 1000));
         }, 1000);
         return () => clearInterval(interval);
+    }, [contestInfo]);
+
+    // We keep these in refs so the heartbeat interval doesn't reset on every minor state change
+    const latestBeatPayload = useRef({
+        contestCode: contestInfo.contestCode,
+        participantId: participantId,
+        problemId: currentChallenge?._id,
+    });
+    useEffect(() => {
+        latestBeatPayload.current = {
+            contestCode: contestInfo.contestCode,
+            participantId: participantId,
+            problemId: currentChallenge?._id,
+        };
+    }, [contestInfo.contestCode, participantId, currentChallenge?._id]);
+
+    useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        const beat = () => {
+            const currentObj = latestBeatPayload.current;
+            apiHeartbeat(currentObj.contestCode, currentObj.participantId, {
+                status: statusTracker.current.compiles > 0 ? 'coding' : 'idle', // general indication
+                compiles: statusTracker.current.compiles,
+                wrongSubmissions: statusTracker.current.wrongSubmissions,
+                reveals: statusTracker.current.reveals,
+                currentProblemId: currentObj.problemId
+            });
+            // 10s + random 0 to 2 seconds
+            timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
+        };
+
+        // First beat stagger
+        timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
+        
+        return () => clearTimeout(timeoutId);
     }, []);
 
     useEffect(() => {
@@ -282,6 +336,7 @@ function ContestApp({
     const handleRun = async () => {
         if (isCompiling || !currentChallenge) return;
         setIsCompiling(true);
+        statusTracker.current.compiles += 1;
 
         const visibleCases = currentChallenge.testCases.filter(tc => !tc.hidden);
         addLog(`🔄 Running ${visibleCases.length} visible test case${visibleCases.length !== 1 ? 's' : ''}...`);
@@ -378,9 +433,25 @@ function ContestApp({
                 }
             }
 
+            // Submit to backend to update real score and status
+            let backendScore = 0;
+            try {
+                const submitRes = await apiSubmitScore(contestInfo.contestCode, participantId, {
+                    passed: allPassed,
+                    timeTaken: Math.floor((Date.now() - levelStartTime) / 1000), // Note: does not include penalties correctly, but we'll abide by current compute
+                    peeks: peekCount,
+                    difficulty: currentChallenge.difficulty
+                });
+                if (submitRes.success && submitRes.passed) {
+                     backendScore = submitRes.scoreEarned || 0;
+                }
+            } catch (err) {
+                console.error("Failed to submit score to backend", err);
+            }
+
             if (allPassed) {
                 const timeTaken = Math.floor((Date.now() - levelStartTime) / 1000);
-                const levelScore = calculateScore(timeTaken, peekCount, currentChallenge.difficulty);
+                const levelScore = backendScore > 0 ? backendScore : calculateScore(timeTaken, peekCount, currentChallenge.difficulty);
 
                 setScore((prev) => prev + levelScore);
 
@@ -406,13 +477,27 @@ function ContestApp({
                     }
                 }, 1500);
             } else {
-                setSubmissionData({
-                    status: "rejected",
-                    message: `Passed ${passedCount} out of ${allTestCases.length} test cases.`,
-                    testResults: testResults,
-                    passedCount,
-                    totalCount: allTestCases.length
-                } as any);
+                statusTracker.current.wrongSubmissions += 1;
+                // Determine if it was just hidden tests that failed or visible tests
+                const failedVisible = testResults.some(r => r.status === 'error' || (r.status === 'failed' && !r.hidden));
+                
+                if (failedVisible) {
+                     setSubmissionData({
+                         status: "rejected",
+                         message: `Failed some sample test cases. Check your logic and expected outputs.`,
+                         testResults: testResults.filter(r => r.status === 'failed' && !r.hidden),
+                         passedCount,
+                         totalCount: allTestCases.length
+                     } as any);
+                } else {
+                     setSubmissionData({
+                         status: "rejected",
+                         message: `Sample cases passed, but hidden cases failed. Passed ${passedCount}/${allTestCases.length}.`,
+                         testResults: [], // hide details for hidden cases!
+                         passedCount,
+                         totalCount: allTestCases.length
+                     } as any);
+                }
                 addLog(`❌ SUBMISSION REJECTED: Failed some test cases.`);
             }
         } catch (error) {
@@ -441,6 +526,7 @@ function ContestApp({
     const handleVision = () => {
         if (visionTimeLeft > 0) return;
         setPeekCount((prev) => prev + 1);
+        statusTracker.current.reveals += 1;
         setIsBlurred(false);
         setVisionTimeLeft(5);
         setTimer(prev => prev + 30);
@@ -563,9 +649,12 @@ function ContestApp({
                             <Trophy size={18} className="text-yellow-400" />
                             <span className="text-yellow-400 font-bold text-base">{score}</span>
                         </div>
-                        <div className="flex items-center gap-3 px-5 py-3 bg-[#1e1e1e] rounded-xl">
-                            <Clock size={18} className="text-white" />
-                            <span className="text-white font-mono font-bold text-base">{formatTime(timer)}</span>
+                        <div className="flex items-center gap-3 px-5 py-3 bg-[#1e1e1e] rounded-xl flex-col items-start gap-0 min-w-32">
+                            <span className="text-[#858585] text-[10px] uppercase font-bold tracking-widest leading-none mb-1">Time Left</span>
+                            <div className="flex items-center gap-2">
+                                <Clock size={16} className="text-white opacity-60" />
+                                <span className="text-white font-mono font-bold text-base leading-none">{formatTime(contestTimeLeft)}</span>
+                            </div>
                         </div>
 
                         <button

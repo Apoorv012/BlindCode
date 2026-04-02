@@ -17,11 +17,12 @@ const participantSchema = new mongoose.Schema({
   password: { type: String, required: true },
   members: [memberSchema],
   joinedAt: { type: Date, default: Date.now },
-  status: { type: String, enum: ['online', 'offline', 'unjoined'], default: 'unjoined' },
+  status: { type: String, enum: ['online', 'offline', 'unjoined', 'coding', 'idle', 'submitted'], default: 'unjoined' },
   currentProblemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Problem' },
   reveals: { type: Number, default: 0 },
   compiles: { type: Number, default: 0 },
   wrongSubmissions: { type: Number, default: 0 },
+  score: { type: Number, default: 0 },
   lastActive: { type: Date }
 })
 

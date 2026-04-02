@@ -198,4 +198,82 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
   }
 })
 
+// POST /:participantId/heartbeat
+router.post('/:participantId/heartbeat', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
+  try {
+    const { contestId, participantId } = req.params;
+    const { status, compiles, wrongSubmissions, reveals, currentProblemId } = req.body;
+
+    const contest = await Contest.findOne({ contestCode: contestId });
+    if (!contest) {
+      res.status(404).json({ message: 'Contest not found' });
+      return;
+    }
+
+    const participant = contest.participants.id(participantId);
+    if (!participant) {
+      res.status(404).json({ message: 'Participant not found' });
+      return;
+    }
+
+    if (status) participant.status = status;
+    if (typeof compiles === 'number') participant.compiles = compiles;
+    if (typeof wrongSubmissions === 'number') participant.wrongSubmissions = wrongSubmissions;
+    if (typeof reveals === 'number') participant.reveals = reveals;
+    if (currentProblemId) participant.currentProblemId = currentProblemId;
+    
+    participant.lastActive = new Date();
+
+    await contest.save();
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST /:participantId/submit
+router.post('/:participantId/submit', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
+  try {
+    const { contestId, participantId } = req.params;
+    const { passed, timeTaken, peeks, difficulty } = req.body;
+
+    const contest = await Contest.findOne({ contestCode: contestId });
+    if (!contest) {
+      res.status(404).json({ message: 'Contest not found' });
+      return;
+    }
+
+    const participant = contest.participants.id(participantId);
+    if (!participant) {
+      res.status(404).json({ message: 'Participant not found' });
+      return;
+    }
+
+    if (!passed) {
+      participant.wrongSubmissions += 1;
+      await contest.save();
+      res.json({ success: true, passed: false });
+      return;
+    }
+
+    const diffLower = String(difficulty).toLowerCase();
+    const baseScore = diffLower === "easy" ? 100 : diffLower === "medium" ? 200 : 300;
+    const timeLimit = 300; // 5 minutes default
+    const timeBonus = Math.max(0, Math.floor((timeLimit - timeTaken) * 0.5));
+    const peekPenalty = peeks * 20;
+    const levelScore = Math.max(0, baseScore + timeBonus - peekPenalty);
+
+    participant.score += levelScore;
+    participant.status = 'submitted';
+    participant.lastActive = new Date();
+
+    await contest.save();
+    res.json({ success: true, passed: true, scoreEarned: levelScore });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 export default router

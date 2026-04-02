@@ -14,6 +14,7 @@ export interface Challenge {
     starterCode: Record<string, string>;
     testCases: TestCase[];
     // Optional fields from the DB Problem model
+    _id?: string;
     inputFormat?: string;
     outputFormat?: string;
     constraints?: string;

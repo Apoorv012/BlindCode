@@ -8,7 +8,7 @@ import {
 } from '../api'
 
 import { ContestStatusEnum } from '../types'
-type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline'
+type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline' | 'online' | 'unjoined'
 type Tab = 'participants' | 'leaderboard' | 'controls'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
 
@@ -22,6 +22,7 @@ interface Problem {
 interface Participant {
   _id: string
   name: string
+  password?: string
   currentProblemId?: { title: string; difficulty: string } | null
   reveals: number
   compiles: number
@@ -35,9 +36,11 @@ const SCORE_MAP: Record<Difficulty, number> = { Easy: 100, Medium: 200, Hard: 30
 
 const statusColors: Record<ParticipantStatus, string> = {
   coding: 'status-coding', idle: 'status-idle', submitted: 'status-submitted', offline: 'status-offline',
+  online: 'status-online', unjoined: 'status-offline'
 }
 const statusLabels: Record<ParticipantStatus, string> = {
   coding: '● Coding', idle: '○ Idle', submitted: '✓ Submitted', offline: '✕ Offline',
+  online: '● Online', unjoined: '○ Unjoined'
 }
 
 export default function Dashboard() {
@@ -61,8 +64,22 @@ export default function Dashboard() {
   const [addError, setAddError] = useState('')
   const [addSuccess, setAddSuccess] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
-  const [newParticipantName, setNewParticipantName] = useState('')
+  
+  const [showTeamModal, setShowTeamModal] = useState(false)
+  const [teamForm, setTeamForm] = useState({
+    name: '', password: '',
+    members: [{ name: '', enroll: '' }, { name: '', enroll: '' }]
+  })
+  const [manualError, setManualError] = useState('')
   const [addParticipantMsg, setAddParticipantMsg] = useState('')
+  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null)
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    let pass = ''
+    for (let i = 0; i < 6; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length))
+    setTeamForm(prev => ({ ...prev, password: pass }))
+  }
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -122,20 +139,30 @@ export default function Dashboard() {
     }
   }
 
-  const handleAddParticipant = async () => {
-    const name = newParticipantName.trim()
-    if (!name) return
+  const handleCreateTeam = async () => {
+    setManualError('')
+    const validMembers = teamForm.members.filter((m: any) => m.name.trim() && m.enroll)
+    if (!teamForm.name || validMembers.length === 0 || !teamForm.password) {
+      setManualError('Please fill all required fields (Team Name, at least 1 Member Name/Enroll, Password)')
+      return
+    }
     try {
+      const payloadMembers = validMembers.map((m: any) => ({
+        name: m.name,
+        enroll: Number(m.enroll)
+      }))
+
       await apiAddParticipant(contestId!, {
-        name,
-        password: 'pass',
-        members: [{ name, enroll: 0 }]
+        name: teamForm.name,
+        password: teamForm.password,
+        members: payloadMembers
       })
-      setNewParticipantName('')
-      setAddParticipantMsg(`Added ${name} successfully!`)
+      setShowTeamModal(false)
+      setTeamForm({ name: '', password: '', members: [{ name: '', enroll: '' }, { name: '', enroll: '' }] })
+      setAddParticipantMsg(`Team ${teamForm.name} added successfully!`)
       setTimeout(() => setAddParticipantMsg(''), 3000)
     } catch (err: any) {
-      setAddParticipantMsg(err.message || 'Failed to add participant')
+      setManualError(err.message || 'Failed to create team')
     }
   }
 
@@ -228,7 +255,7 @@ export default function Dashboard() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>#</th><th>Name</th><th>Status</th><th>Current Problem</th>
+                    <th>#</th><th>Name</th><th>Password</th><th>Status</th><th>Current Problem</th>
                     <th>Score</th><th>Reveals</th><th>Compiles</th><th>Wrong</th><th>Last Active</th>
                   </tr>
                 </thead>
@@ -240,6 +267,25 @@ export default function Dashboard() {
                     <tr key={p._id} className="table-row">
                       <td className="td-num">{i + 1}</td>
                       <td className="td-name">{p.name}</td>
+                      <td>
+                        <div
+                           className="lobby-participant-pass-wrap"
+                           onMouseLeave={() => setVisiblePasswordId(null)}
+                           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                         >
+                           <span className="lobby-participant-pass" style={{ fontFamily: 'monospace' }}>
+                             {visiblePasswordId === p._id ? p.password : '••••••'}
+                           </span>
+                           <button
+                             className="lobby-pass-eye"
+                             onClick={() => setVisiblePasswordId(p._id)}
+                             title="Show Password"
+                             style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6 }}
+                           >
+                             {visiblePasswordId === p._id ? '👁️' : '🔒'}
+                           </button>
+                         </div>
+                      </td>
                       <td><span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span></td>
                       <td className="td-problem">{p.currentProblemId?.title || '—'}</td>
                       <td className="td-score">{p.score}</td>
@@ -321,15 +367,7 @@ export default function Dashboard() {
                 <div className="control-label">Add Participant</div>
                 <div className="add-problem-hint">Manually add a participant mid-contest</div>
                 <div className="add-problem-input-row">
-                  <input
-                    className="add-problem-input"
-                    placeholder="Participant name..."
-                    value={newParticipantName}
-                    onChange={e => { setNewParticipantName(e.target.value); setAddParticipantMsg('') }}
-                    onKeyDown={e => e.key === 'Enter' && handleAddParticipant()}
-                    style={{ textTransform: 'none', letterSpacing: 'normal' }}
-                  />
-                  <button className="add-problem-btn" onClick={handleAddParticipant}>+ Add</button>
+                  <button className="add-problem-btn" onClick={() => setShowTeamModal(true)} style={{ width: '100%' }}>+ Create Team</button>
                 </div>
                 {addParticipantMsg && (
                   <div className={`add-feedback ${addParticipantMsg.includes('Added') ? 'add-success' : 'add-error'}`}>
@@ -399,6 +437,72 @@ export default function Dashboard() {
         )}
 
       </main>
+
+      {showTeamModal && (
+        <div className="team-modal-overlay" style={{ zIndex: 1000, position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="team-modal" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '500px' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '1.5rem', color: '#fff' }}>Create New Team</h3>
+
+            <div className="modal-input-group" style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Team Name <span className="req" style={{ color: 'red' }}>*</span></label>
+              <input value={teamForm.name} onChange={e => setTeamForm({ ...teamForm, name: e.target.value })} placeholder="e.g. Lambda" style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+            </div>
+
+            <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <div className="modal-input-group" style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 1 Name <span className="req" style={{ color: 'red' }}>*</span></label>
+                <input value={teamForm.members[0].name} onChange={e => {
+                  const newMembers = [...teamForm.members]
+                  newMembers[0].name = e.target.value
+                  setTeamForm({ ...teamForm, members: newMembers })
+                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+              </div>
+              <div className="modal-input-group" style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 1 <span className="req" style={{ color: 'red' }}>*</span></label>
+                <input type="number" value={teamForm.members[0].enroll} onChange={e => {
+                  const newMembers = [...teamForm.members]
+                  newMembers[0].enroll = e.target.value
+                  setTeamForm({ ...teamForm, members: newMembers })
+                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+              </div>
+            </div>
+
+            <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <div className="modal-input-group" style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 2 Name (Opt)</label>
+                <input value={teamForm.members[1].name} onChange={e => {
+                  const newMembers = [...teamForm.members]
+                  newMembers[1].name = e.target.value
+                  setTeamForm({ ...teamForm, members: newMembers })
+                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+              </div>
+              <div className="modal-input-group" style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 2 (Opt)</label>
+                <input type="number" value={teamForm.members[1].enroll} onChange={e => {
+                  const newMembers = [...teamForm.members]
+                  newMembers[1].enroll = e.target.value
+                  setTeamForm({ ...teamForm, members: newMembers })
+                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+              </div>
+            </div>
+
+            <div className="modal-input-group row-align" style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', marginBottom: '24px' }}>
+              <div className="flex-1" style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Password <span className="req" style={{ color: 'red' }}>*</span></label>
+                <input value={teamForm.password} onChange={e => setTeamForm({ ...teamForm, password: e.target.value })} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+              </div>
+              <button className="manual-add-btn pass-btn" onClick={generatePassword} style={{ padding: '12px 24px', background: '#2c3e50', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Generate</button>
+            </div>
+
+            {manualError && <div className="manual-add-error" style={{ color: '#ef4444', background: '#ef444420', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>{manualError}</div>}
+
+            <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #3c3c3c', paddingTop: '24px' }}>
+              <button className="lobby-back-btn" onClick={() => setShowTeamModal(false)} style={{ padding: '10px 20px', background: 'transparent', color: '#858585', border: '1px solid #3c3c3c', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
+              <button className="manual-add-btn" onClick={handleCreateTeam} style={{ padding: '10px 20px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Team</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

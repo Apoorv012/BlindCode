@@ -42,23 +42,38 @@ export const apiGetContestStatus = async (contestCode: string) => {
   return data as { status: 'draft' | 'running' | 'paused' | 'ended' }
 }
 
-// ─── Leaderboard ──────────────────────────────────────────────────────────────
-
-export interface ScorePayload {
-  name: string
-  password?: string
-  score: number
-  levelScores: { level: number; score: number; timeTaken: number; peeks: number }[]
+export interface SubmitScorePayload {
+  passed: boolean;
+  timeTaken: number;
+  peeks: number;
+  difficulty: string;
 }
 
-export const apiSubmitScore = async (contestCode: string, payload: ScorePayload) => {
-  const res = await fetch(`${API_URL}/contests/${contestCode}/score`, {
+export const apiSubmitScore = async (contestCode: string, participantId: string, payload: SubmitScorePayload) => {
+  const res = await fetch(`${API_URL}/contests/${contestCode}/participants/${participantId}/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message || 'Failed to submit score')
+  return data
+}
+
+export const apiHeartbeat = async (contestCode: string, participantId: string, payload: {
+  status: string;
+  compiles?: number;
+  wrongSubmissions?: number;
+  reveals?: number;
+  currentProblemId?: string;
+}) => {
+  const res = await fetch(`${API_URL}/contests/${contestCode}/participants/${participantId}/heartbeat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  const data = await res.json()
+  if (!res.ok) console.error('Heartbeat failed:', data.message)
   return data
 }
 
@@ -97,6 +112,7 @@ export const apiGetProblem = async (problemId: string): Promise<Challenge> => {
   // Map MongoDB Problem → Challenge shape
   return {
     id: 0, // not used when fetching from API
+    _id: data._id,
     title: data.title,
     description: data.description || '',
     expectedOutput: '', // deprecated, testCases used instead
