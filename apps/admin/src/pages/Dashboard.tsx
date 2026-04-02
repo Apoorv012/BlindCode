@@ -4,12 +4,10 @@ import './Dashboard.css'
 import {
   apiGetContest, apiGetParticipants, apiPauseContest,
   apiEndContest, apiAddParticipant, apiAddProblemToContest,
-  apiRemoveProblemFromContest, API_URL
+  apiRemoveProblemFromContest
 } from '../api'
-
-import { io, Socket } from 'socket.io-client'
-
 import { ContestStatusEnum } from '../types'
+
 type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline' | 'online' | 'unjoined'
 type Tab = 'participants' | 'leaderboard' | 'controls'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
@@ -25,7 +23,8 @@ interface Participant {
   _id: string
   name: string
   password?: string
-  currentProblemId?: { title: string; difficulty: string } | null
+  currentProblemId?: { _id: string; title: string; difficulty: string } | null
+  solvedProblemIds?: string[] // Track solved problems for the spheres
   reveals: number
   compiles: number
   wrongSubmissions: number
@@ -66,7 +65,7 @@ export default function Dashboard() {
   const [addError, setAddError] = useState('')
   const [addSuccess, setAddSuccess] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
-  
+
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamForm, setTeamForm] = useState({
     name: '', password: '',
@@ -97,6 +96,7 @@ export default function Dashboard() {
     }).catch(console.error)
   }, [contestId])
 
+  // Poll participants every 2s
   useEffect(() => {
     if (!contestId) return
     const fetch = () => {
@@ -105,21 +105,8 @@ export default function Dashboard() {
         .catch(console.error)
     }
     fetch()
-    
-    // Connect WebSockets for real-time tracking
-    const socket: Socket = io(API_URL)
-    socket.emit('admin_join', { contestId })
-    socket.on('participant_update', () => {
-      fetch() // Instant refresh triggered by the backend
-    })
-
-    // Fallback polling for slow syncs
-    pollRef.current = setInterval(fetch, 15000)
-    
-    return () => { 
-      if (pollRef.current) clearInterval(pollRef.current) 
-      socket.disconnect()
-    }
+    pollRef.current = setInterval(fetch, 2000)
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [contestId])
 
   // Countdown timer
@@ -209,6 +196,7 @@ export default function Dashboard() {
   const codingCount = participants.filter(p => p.status === 'coding').length
   const submittedCount = participants.filter(p => p.status === 'submitted').length
   const offlineCount = participants.filter(p => p.status === 'offline').length
+  const maxPossibleScore = contestProblems.reduce((sum, p) => sum + SCORE_MAP[p.difficulty], 0)
 
   return (
     <div className={`app ${theme}`}>
@@ -284,22 +272,22 @@ export default function Dashboard() {
                       <td className="td-name">{p.name}</td>
                       <td>
                         <div
-                           className="lobby-participant-pass-wrap"
-                           onMouseLeave={() => setVisiblePasswordId(null)}
-                           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-                         >
-                           <span className="lobby-participant-pass" style={{ fontFamily: 'monospace' }}>
-                             {visiblePasswordId === p._id ? p.password : '••••••'}
-                           </span>
-                           <button
-                             className="lobby-pass-eye"
-                             onClick={() => setVisiblePasswordId(p._id)}
-                             title="Show Password"
-                             style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6 }}
-                           >
-                             {visiblePasswordId === p._id ? '👁️' : '🔒'}
-                           </button>
-                         </div>
+                          className="lobby-participant-pass-wrap"
+                          onMouseLeave={() => setVisiblePasswordId(null)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          <span className="lobby-participant-pass" style={{ fontFamily: 'monospace' }}>
+                            {visiblePasswordId === p._id ? p.password : '••••••'}
+                          </span>
+                          <button
+                            className="lobby-pass-eye"
+                            onClick={() => setVisiblePasswordId(p._id)}
+                            title="Show Password"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6 }}
+                          >
+                            {visiblePasswordId === p._id ? '👁️' : '🔒'}
+                          </button>
+                        </div>
                       </td>
                       <td><span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span></td>
                       <td className="td-problem">{p.currentProblemId?.title || '—'}</td>
@@ -321,28 +309,68 @@ export default function Dashboard() {
         {/* Leaderboard Tab */}
         {tab === 'leaderboard' && (
           <div className="tab-content">
-            <div className="section-header">
-              <h2 className="section-title">Leaderboard</h2>
-              <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300 · Wrong −50 · Reveal −20</p>
+            <div className="section-header flex-between">
+              <div>
+                <h2 className="section-title">Leaderboard</h2>
+                <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300</p>
+              </div>
+              <div className="last-sync-badge">
+                <span className="sync-dot"></span> Live
+              </div>
             </div>
-            <div className="leaderboard">
-              {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24 }}>No participants yet</div>}
-              {leaderboard.map((p, i) => (
-                <div key={p._id} className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}>
-                  <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
-                  <div className="lb-name">{p.name}</div>
-                  <div className="lb-bar-wrap">
-                    <div className="lb-bar" style={{ width: `${Math.min((p.score / 400) * 100, 100)}%` }} />
+
+            <div className="leaderboard-container">
+              <div
+                className="lb-header"
+                // Removed the 140px width that was for Meta
+                style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+              >
+                <div className="lb-col-center">Rank</div>
+                <div>Name</div>
+                <div className="lb-col-right">Score</div>
+                <div className="lb-col-center">Status</div>
+                {contestProblems.map((prob, i) => (
+                  <div key={prob._id} className="lb-col-center" title={prob.title}>
+                    Q{i + 1}
                   </div>
-                  <div className="lb-score">{p.score} pts</div>
-                  <div className="lb-meta">
-                    {p.reveals > 0 && <span className="lb-tag lb-reveal">{p.reveals} reveals</span>}
-                    {p.wrongSubmissions > 0 && <span className="lb-tag lb-wrong">{p.wrongSubmissions} wrong</span>}
-                    {p.reveals === 0 && p.wrongSubmissions === 0 && <span className="lb-tag lb-clean">clean</span>}
+                ))}
+              </div>
+
+              <div className="leaderboard">
+                {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24, textAlign: 'center' }}>No participants yet</div>}
+
+                {leaderboard.map((p, i) => (
+                  <div
+                    key={p._id}
+                    className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}
+                    // Removed the 140px width that was for Meta
+                    style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+                  >
+                    <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+                    <div className="lb-name" title={p.name}>{p.name}</div>
+
+                    <div className="lb-score-wrap">
+                      <span className="lb-score-obtained">{p.score}</span>
+                      <span className="lb-score-total">/ {maxPossibleScore}</span>
+                    </div>
+
+                    <div className="lb-col-center">
+                      <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status].split(' ')[0]}</span>
+                    </div>
+
+                    {contestProblems.map(prob => {
+                      const isSolved = p.solvedProblemIds?.includes(prob._id) || false;
+                      const isCurrent = p.currentProblemId?._id === prob._id || p.currentProblemId?.title === prob.title;
+
+                      return (
+                        <div key={prob._id} className="lb-col-center">
+                          <div className={`prob-sphere ${isSolved ? 'solved' : isCurrent ? 'current' : 'unsolved'}`} />
+                        </div>
+                      )
+                    })}
                   </div>
-                  <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}

@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useEffect, useCallback, useRef } from "react";
 import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
-import ProblemSidebar, { type SubmissionData } from "./components/ProblemSidebar";
+import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
 import { LogOut, Trophy, Target, Clock, Zap, Loader2 } from "lucide-react";
 import type { Challenge } from "./data/questions";
-import { apiGetProblem, apiSubmitScore, API_URL } from "./services/desktopApi";
+
 import { io, Socket } from "socket.io-client";
 import { compileCode } from "./services/api";
 import UserDashboard from "./pages/UserDashboard";
+import { apiGetProblem, apiSubmitScore, API_URL, apiGetLeaderboard } from "./services/desktopApi";
 import "./App.css";
 
 // ── Contest info shape (passed from UserDashboard on join) ────────────────────
@@ -57,10 +58,7 @@ export default function App() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INNER GAME — your original App() logic, completely untouched except:
-//   • renamed to ContestApp
-//   • receives joinedTeamName (pre-fills teamName)
-//   • handleLogout calls onExit() to go back to UserDashboard
+// INNER GAME — Contest Application Logic
 // ─────────────────────────────────────────────────────────────────────────────
 const SABOTAGE_CHARS = [";", "{", "}", "[", "]", "?", "!", "x", "=", ")", "(", "<", ">"];
 
@@ -93,10 +91,10 @@ function ContestApp({
 
     // Heartbeat logic
     const statusTracker = useRef({
-      status: 'idle',
-      compiles: 0,
-      wrongSubmissions: 0,
-      reveals: 0
+        status: 'idle',
+        compiles: 0,
+        wrongSubmissions: 0,
+        reveals: 0
     });
 
     // Resizer States
@@ -117,9 +115,25 @@ function ContestApp({
     const [problemsLoading, setProblemsLoading] = useState(true);
     const [problemsError, setProblemsError] = useState("");
 
-    // Sidebar States
-    const [activeSidebarTab, setActiveSidebarTab] = useState<"description" | "submissions">("description");
+    // Sidebar States (UPDATED with Leaderboard)
+    const [activeSidebarTab, setActiveSidebarTab] = useState<"description" | "submissions" | "leaderboard">("description");
     const [submissionData, setSubmissionData] = useState<SubmissionData>({ status: "idle", message: "" });
+    const [leaderboardData, setLeaderboardData] = useState<LeaderboardParticipant[]>([]);
+
+    // Fetch Leaderboard periodically
+    useEffect(() => {
+        const fetchLb = () => {
+            if (!contestInfo?.contestCode) return;
+            apiGetLeaderboard(contestInfo.contestCode)
+                .then(data => setLeaderboardData(data))
+                .catch(err => console.error("Failed to update leaderboard:", err));
+        };
+
+        fetchLb(); // Initial fetch
+        const interval = setInterval(fetchLb, 5000); // Poll every 5 seconds
+
+        return () => clearInterval(interval);
+    }, [contestInfo.contestCode]);
 
     const handlePartialVision = (cost: number, text: string) => {
         setTimer(prev => prev + cost);
@@ -165,10 +179,10 @@ function ContestApp({
     }, [problemsLoading]);
 
     useEffect(() => {
-        let contestEndTime = contestInfo.intendedEndTime 
-            ? new Date(contestInfo.intendedEndTime).getTime() 
+        let contestEndTime = contestInfo.intendedEndTime
+            ? new Date(contestInfo.intendedEndTime).getTime()
             : (contestInfo.startedAt ? new Date(contestInfo.startedAt).getTime() + (contestInfo.duration * 60000) : Date.now() + (contestInfo.duration * 60000));
-        
+
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
             setContestTimeLeft(Math.floor(Math.max(0, contestEndTime - Date.now()) / 1000));
@@ -179,7 +193,7 @@ function ContestApp({
     useEffect(() => {
         const newSocket = io(API_URL);
         setSocket(newSocket);
-        
+
         newSocket.on("connect", () => {
             newSocket.emit("participant_join", {
                 contestId: contestInfo.contestCode,
@@ -228,7 +242,7 @@ function ContestApp({
 
         // First beat stagger
         timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
-        
+
         return () => clearTimeout(timeoutId);
     }, [socket]);
 
@@ -469,7 +483,7 @@ function ContestApp({
                     difficulty: currentChallenge.difficulty
                 });
                 if (submitRes.success && submitRes.passed) {
-                     backendScore = submitRes.scoreEarned || 0;
+                    backendScore = submitRes.scoreEarned || 0;
                 }
             } catch (err) {
                 console.error("Failed to submit score to backend", err);
@@ -481,7 +495,7 @@ function ContestApp({
 
                 setScore((prev) => prev + levelScore);
 
-                // NAYA: Extended submission data
+                // Extended submission data
                 setSubmissionData({
                     status: "accepted",
                     message: "All test cases passed! Outstanding work.",
@@ -491,7 +505,7 @@ function ContestApp({
                     testResults: testResults,
                     passedCount,
                     totalCount: allTestCases.length
-                } as any); // "as any" temporary hai Phase 3 tak
+                } as any);
 
                 addLog(`✅ SUBMISSION ACCEPTED: +${levelScore} pts`);
 
@@ -506,23 +520,23 @@ function ContestApp({
                 statusTracker.current.wrongSubmissions += 1;
                 // Determine if it was just hidden tests that failed or visible tests
                 const failedVisible = testResults.some(r => r.status === 'error' || (r.status === 'failed' && !r.hidden));
-                
+
                 if (failedVisible) {
-                     setSubmissionData({
-                         status: "rejected",
-                         message: `Failed some sample test cases. Check your logic and expected outputs.`,
-                         testResults: testResults.filter(r => r.status === 'failed' && !r.hidden),
-                         passedCount,
-                         totalCount: allTestCases.length
-                     } as any);
+                    setSubmissionData({
+                        status: "rejected",
+                        message: `Failed some sample test cases. Check your logic and expected outputs.`,
+                        testResults: testResults.filter(r => r.status === 'failed' && !r.hidden),
+                        passedCount,
+                        totalCount: allTestCases.length
+                    } as any);
                 } else {
-                     setSubmissionData({
-                         status: "rejected",
-                         message: `Sample cases passed, but hidden cases failed. Passed ${passedCount}/${allTestCases.length}.`,
-                         testResults: [], // hide details for hidden cases!
-                         passedCount,
-                         totalCount: allTestCases.length
-                     } as any);
+                    setSubmissionData({
+                        status: "rejected",
+                        message: `Sample cases passed, but hidden cases failed. Passed ${passedCount}/${allTestCases.length}.`,
+                        testResults: [], // hide details for hidden cases!
+                        passedCount,
+                        totalCount: allTestCases.length
+                    } as any);
                 }
                 addLog(`❌ SUBMISSION REJECTED: Failed some test cases.`);
             }
@@ -632,13 +646,15 @@ function ContestApp({
             {/* Left Column: Problem Sidebar (Now wrapped for dynamic width) */}
             <div style={{ width: sidebarWidth }} className="shrink-0 flex flex-col relative h-full">
                 {currentChallenge && (
-                <ProblemSidebar
-                    challenge={currentChallenge}
-                    activeTab={activeSidebarTab}
-                    onTabChange={setActiveSidebarTab}
-                    submission={submissionData}
-                    level={currentLevel}
-                />
+                    <ProblemSidebar
+                        challenge={currentChallenge}
+                        activeTab={activeSidebarTab}
+                        onTabChange={setActiveSidebarTab}
+                        submission={submissionData}
+                        level={currentLevel}
+                        leaderboard={leaderboardData}
+                        currentParticipantId={participantId}
+                    />
                 )}
             </div>
 

@@ -50,3 +50,17 @@ export async function compileCode(code: string, language: string, input: string 
         };
     }
 }
+
+export const apiGetLeaderboard = async (contestCode: string) => {
+    try {
+        const response = await fetch(`${API_URL}/api/contests/${contestCode}/leaderboard`);
+        if (!response.ok) {
+            throw new Error("Failed to fetch leaderboard");
+        }
+        const data = await response.json();
+        return data; // Returns array of participants sorted by score
+    } catch (error) {
+        console.error("Leaderboard fetch error:", error);
+        return [];
+    }
+};
