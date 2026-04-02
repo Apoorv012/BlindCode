@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/tauri";
 
+const API_URL = "http://localhost:4000";
+
 export interface CompilerResponse {
     output: string;
     hasError: boolean;

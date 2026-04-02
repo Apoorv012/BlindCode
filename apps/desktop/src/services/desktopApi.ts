@@ -84,13 +84,7 @@ export const apiGetLeaderboard = async (contestCode: string) => {
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message)
-  return data as {
-    rank: number
-    name: string
-    password?: string
-    score: number
-    levelScores: { level: number; score: number; timeTaken: number; peeks: number }[]
-  }[]
+  return data as any[];
 }
 
 // ─── Fetch a single problem (public, no auth) ─────────────────────────────────
