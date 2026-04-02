@@ -43,7 +43,8 @@ const contestSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   startedAt: Date,
   endedAt: Date,
-  intendedEndTime: Date
+  intendedEndTime: Date,
+  pausedAt: Date
 })
 
 export default mongoose.model('Contest', contestSchema)

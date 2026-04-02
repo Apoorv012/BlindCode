@@ -3,6 +3,7 @@ import Contest, { ContestStatusEnum } from '../models/Contest'
 import Problem from '../models/Problem'
 import { protect, AuthRequest } from '../middleware/auth'
 import mongoose from 'mongoose'
+import { getIo } from '../socket'
 
 const router = express.Router()
 
@@ -98,6 +99,14 @@ router.post('/:contestId/start', protect, async (req: AuthRequest, res) => {
     contestDoc.intendedEndTime = intendedEndTime
 
     await contestDoc.save()
+
+    // Notify all clients (admin + participants) about the updated contest timing
+    try {
+      const io = getIo();
+      io.to(`admin_${contestDoc.contestCode}`).emit('contest_update');
+      io.to(`contest_${contestDoc.contestCode}`).emit('contest_update');
+    } catch {}
+
     res.json({ success: true, contest: contestDoc })
   } catch {
     res.status(500).json({ message: 'Server error' })
@@ -115,10 +124,33 @@ router.post('/:contestId/pause', protect, async (req: AuthRequest, res) => {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    const newStatus = contest.status === ContestStatusEnum.running ? ContestStatusEnum.paused : ContestStatusEnum.running
-    contest.status = newStatus
+
+    const now = new Date()
+
+    if (contest.status === ContestStatusEnum.running) {
+      // Pausing: record when we paused
+      contest.status = ContestStatusEnum.paused
+      contest.pausedAt = now
+    } else if (contest.status === ContestStatusEnum.paused && contest.pausedAt) {
+      // Resuming: shift intendedEndTime by however long we were paused
+      const pauseDurationMs = now.getTime() - contest.pausedAt.getTime()
+      if (contest.intendedEndTime) {
+        contest.intendedEndTime = new Date(contest.intendedEndTime.getTime() + pauseDurationMs)
+      }
+      contest.status = ContestStatusEnum.running
+      contest.pausedAt = undefined
+    }
+
     await contest.save()
-    res.json({ status: newStatus })
+
+    // Notify all clients (admin + participants) so they pick up the new status + intendedEndTime
+    try {
+      const io = getIo();
+      io.to(`admin_${contest.contestCode}`).emit('contest_update');
+      io.to(`contest_${contest.contestCode}`).emit('contest_update');
+    } catch {}
+
+    res.json({ status: contest.status, intendedEndTime: contest.intendedEndTime })
   } catch {
     res.status(500).json({ message: 'Server error' })
   }

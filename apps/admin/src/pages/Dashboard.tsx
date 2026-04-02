@@ -133,6 +133,7 @@ export default function Dashboard() {
     try {
       const data = await apiPauseContest(contestId!)
       setContestState(data.status)
+      if (data.intendedEndTime) setIntendedEndTime(data.intendedEndTime)
     } catch (err) { console.error(err) }
   }
 

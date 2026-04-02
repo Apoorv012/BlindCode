@@ -102,6 +102,12 @@ function ContestApp({
     const [language, setLanguage] = useState("cpp");
     const [isCompiling, setIsCompiling] = useState(false);
     const [contestTimeLeft, setContestTimeLeft] = useState(0);
+    const [liveEndTime, setLiveEndTime] = useState<number>(
+        contestInfo.intendedEndTime
+            ? new Date(contestInfo.intendedEndTime).getTime()
+            : Date.now() + (contestInfo.duration * 60000)
+    );
+    const [contestPaused, setContestPaused] = useState(contestInfo.status === 'paused');
     const [socket, setSocket] = useState<Socket | null>(null);
 
     // Heartbeat logic
@@ -191,16 +197,13 @@ function ContestApp({
     }, [problemsLoading]);
 
     useEffect(() => {
-        let contestEndTime = contestInfo.intendedEndTime
-            ? new Date(contestInfo.intendedEndTime).getTime()
-            : (contestInfo.startedAt ? new Date(contestInfo.startedAt).getTime() + (contestInfo.duration * 60000) : Date.now() + (contestInfo.duration * 60000));
-
+        if (contestPaused) return; // Don't tick while paused
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
-            setContestTimeLeft(Math.floor(Math.max(0, contestEndTime - Date.now()) / 1000));
+            setContestTimeLeft(Math.max(0, Math.floor((liveEndTime - Date.now()) / 1000)));
         }, 1000);
         return () => clearInterval(interval);
-    }, [contestInfo]);
+    }, [liveEndTime, contestPaused]);
 
     useEffect(() => {
         const newSocket = io(API_URL);
@@ -215,6 +218,20 @@ function ContestApp({
 
         newSocket.on("participant_update", () => {
             fetchLb();
+        });
+
+        // When admin pauses/resumes, fetch latest contest state and update timers
+        newSocket.on("contest_update", () => {
+            fetch(`${API_URL}/contests/code/${contestInfo.contestCode}`)
+                .then(r => r.json())
+                .then(data => {
+                    addLog(`Contest updated: ${data.status}`);
+                    if (data.intendedEndTime) {
+                        setLiveEndTime(new Date(data.intendedEndTime).getTime());
+                    }
+                    setContestPaused(data.status === 'paused');
+                })
+                .catch(console.error);
         });
 
         return () => {

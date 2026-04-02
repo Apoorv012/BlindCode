@@ -21,7 +21,8 @@ export const initSocket = (httpServer: HttpServer) => {
     });
 
     socket.on('participant_join', async ({ contestId, participantId }) => {
-      socket.join(`part_${participantId}`);
+      // Join contest room
+      socket.join(`contest_${contestId}`);
       try {
         const contest = await Contest.findOne({ contestCode: contestId });
         if (contest) {
