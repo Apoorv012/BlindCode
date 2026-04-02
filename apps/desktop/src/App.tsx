@@ -4,26 +4,17 @@ import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
 import Leaderboard from "./components/Leaderboard";
-import { LogOut, Trophy, Target, Clock, Zap, Loader2, Award } from "lucide-react";
+import { LogOut, Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle } from "lucide-react";
+import { appWindow } from "@tauri-apps/api/window";
+import { exit } from "@tauri-apps/api/process";
 import type { Challenge } from "./data/questions";
 
 import { io, Socket } from "socket.io-client";
 import { compileCode } from "./services/api";
 import UserDashboard from "./pages/UserDashboard";
 import { apiGetProblem, apiSubmitScore, API_URL, apiGetLeaderboard } from "./services/desktopApi";
+import { ContestStatus, type ContestInfo } from "./types";
 import "./App.css";
-
-// ── Contest info shape (passed from UserDashboard on join) ────────────────────
-export interface ContestInfo {
-    _id: string;
-    contestCode: string;
-    name: string;
-    duration: number;
-    status: "draft" | "running" | "paused" | "ended";
-    startedAt?: string;
-    intendedEndTime?: string;
-    problemIds: { _id: string; title: string; difficulty: string }[];
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OUTER GATE — shows UserDashboard until a contest is joined, then renders game
@@ -141,7 +132,9 @@ function ContestApp({
     const [activeSidebarTab, setActiveSidebarTab] = useState<"description" | "submissions" | "leaderboard">("description");
     const [submissionData, setSubmissionData] = useState<SubmissionData>({ status: "idle", message: "" });
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardParticipant[]>([]);
-    const [contestEnded, setContestEnded] = useState(contestInfo.status === 'ended');
+    const [contestEnded, setContestEnded] = useState(contestInfo.status === ContestStatus.ENDED);
+    const [cheatingDetected, setCheatingDetected] = useState(false);
+    const [unlockCode, setUnlockCode] = useState("");
 
     // Fetch Leaderboard when event arrives
     const fetchLb = useCallback(() => {
@@ -209,7 +202,7 @@ function ContestApp({
             }
         }, 1000);
         return () => clearInterval(interval);
-    }, [liveEndTime, contestPaused]);
+    }, [liveEndTime, contestEnded]);
 
     useEffect(() => {
         const newSocket = io(API_URL);
@@ -235,8 +228,8 @@ function ContestApp({
                     if (data.intendedEndTime) {
                         setLiveEndTime(new Date(data.intendedEndTime).getTime());
                     }
-                    setContestPaused(data.status === 'paused');
-                    if (data.status === 'ended') {
+                    setContestPaused(data.status === ContestStatus.PAUSED);
+                    if (data.status === ContestStatus.ENDED) {
                         setContestEnded(true);
                     }
                 })
@@ -288,16 +281,66 @@ function ContestApp({
         return () => clearTimeout(timeoutId);
     }, [socket]);
 
+    // SECURITY & ANTI-CHEAT
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (document.hidden) {
-                addLog("⚠️ TAB SWITCH DETECTED. +30s PENALTY.");
-                setTimer((prev) => prev + 30);
+            if (document.hidden && !contestEnded) {
+                setCheatingDetected(true);
+                addLog("⚠️ CHEATING DETECTED: Application lost focus!");
             }
         };
+
+        const handleBlur = () => {
+            if (!contestEnded) {
+                setCheatingDetected(true);
+                addLog("⚠️ CHEATING DETECTED: Window blurred!");
+            }
+        }
+
+        const handleContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            return false;
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Disable DevTools
+            if (e.key === "F12" || (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C" || e.key === "K"))) {
+                e.preventDefault();
+                return false;
+            }
+            // Disable Refresh
+            if (e.key === "F5" || (e.ctrlKey && e.key === "r")) {
+                e.preventDefault();
+                return false;
+            }
+            // Disable Copy/Paste after contest starts
+            if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "x")) {
+                e.preventDefault();
+                return false;
+            }
+            // Disable Alt+Tab disruptions (some handled by OS, but we catch others)
+            if (e.altKey && (e.key === "Tab" || e.key === "F4")) {
+                e.preventDefault();
+                return false;
+            }
+            // Emergency Exit for Testing
+            if (e.ctrlKey && e.shiftKey && e.key === "Q") {
+                exit(0);
+            }
+        };
+
         document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [addLog]);
+        window.addEventListener("blur", handleBlur);
+        window.addEventListener("contextmenu", handleContextMenu);
+        window.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("blur", handleBlur);
+            window.removeEventListener("contextmenu", handleContextMenu);
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [contestEnded, addLog]);
 
     useEffect(() => {
         if (visionTimeLeft > 0) {
@@ -665,25 +708,77 @@ function ContestApp({
                 </div>
             )}
 
-            {showGameComplete && (
+            {showGameComplete && !contestEnded && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-50 p-8">
-                    <div className="bg-[#252526] border border-yellow-500/30 rounded-3xl p-14 text-center max-w-lg shadow-[0_0_50px_rgba(234,179,8,0.2)] relative overflow-hidden">
+                    <div className="bg-[#252526] border border-green-500/30 rounded-3xl p-14 text-center max-w-xl shadow-[0_0_50px_rgba(16,185,129,0.2)] relative overflow-hidden">
                         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                         <div className="relative z-10">
-                            <div className="text-8xl mb-8 animate-bounce">🏆</div>
-                            <h2 className="text-5xl font-black text-white mb-4 tracking-tighter" style={{ fontFamily: 'var(--font-orbitron)' }}>MISSION ACCOMPLISHED</h2>
-                            <p className="text-[#858585] mb-6 text-xl font-mono">Operations complete. System standby.</p>
-                            <div className="bg-black/50 p-6 rounded-2xl border border-[#3c3c3c] mb-10">
-                                <p className="text-yellow-400 text-5xl font-bold mb-2 tracking-widest" style={{ fontFamily: 'var(--font-orbitron)' }}>{score}</p>
-                                <p className="text-[#666] text-sm uppercase tracking-widest">Final Parameter Score</p>
+                            <div className="text-8xl mb-8 animate-bounce">🎖️</div>
+                            <h2 className="text-5xl font-black text-white mb-4 tracking-tighter" style={{ fontFamily: 'var(--font-orbitron)' }}>WELL DONE!</h2>
+                            <p className="text-[#858585] mb-6 text-xl font-mono">You've completed all parameters. Mission objective reached.</p>
+                            
+                            <div className="bg-green-500/10 p-8 rounded-2xl border border-green-500/20 mb-10">
+                                <h3 className="text-green-400 text-2xl font-bold mb-2">Congratulations!</h3>
+                                <p className="text-[#cccccc] text-lg">You have successfully completed all questions.</p>
+                                <div className="mt-6 flex flex-col items-center gap-2">
+                                    <Loader2 className="text-green-500 animate-spin" size={32} />
+                                    <p className="text-green-500 font-bold animate-pulse text-sm uppercase tracking-widest">Please wait for the contest to end...</p>
+                                </div>
                             </div>
-                            <p className="text-[#858585] mb-10 text-lg font-mono">Time: {formatTime(timer)} | Peeks: {peekCount}</p>
-                            <button
-                                onClick={handleLogout}
-                                className="px-12 py-5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl font-bold text-xl transition-all hover:scale-105 hover:shadow-[0_0_30px_rgba(168,85,247,0.5)]"
-                                style={{ fontFamily: 'var(--font-orbitron)' }}
+
+                            <div className="bg-black/50 p-6 rounded-2xl border border-[#3c3c3c] mb-10 flex justify-center gap-12">
+                                <div>
+                                    <p className="text-yellow-400 text-3xl font-bold mb-1 tracking-widest">{score}</p>
+                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Final Score</p>
+                                </div>
+                                <div className="w-px h-12 bg-[#3c3c3c]"></div>
+                                <div>
+                                    <p className="text-white text-3xl font-bold mb-1 tracking-widest">{formatTime(timer)}</p>
+                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Total Time</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CHEATING DETECTED OVERLAY */}
+            {cheatingDetected && !contestEnded && (
+                <div className="fixed inset-0 bg-red-950/95 backdrop-blur-2xl flex items-center justify-center z-[500] p-8">
+                    <div className="bg-black border-4 border-red-600 rounded-3xl p-16 text-center max-w-2xl shadow-[0_0_100px_rgba(220,38,38,0.5)]">
+                        <AlertTriangle size={120} className="text-red-600 mx-auto mb-10 animate-pulse" />
+                        <h2 className="text-6xl font-black text-white mb-6 tracking-tighter" style={{ fontFamily: 'var(--font-orbitron)' }}>DEVICE LOCKED</h2>
+                        <p className="text-red-500 text-2xl font-bold mb-10 uppercase tracking-widest">Cheating Attempt Detected</p>
+                        
+                        <div className="bg-red-900/10 border border-red-900/30 p-8 rounded-2xl mb-12">
+                            <p className="text-[#858585] text-xl mb-4">Application lost focus. All operations suspended.</p>
+                            <p className="text-white font-bold text-lg underline">PLEASE CONTACT A CONTEST ADMINISTRATOR TO UNLOCK THIS DEVICE.</p>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-4">
+                            <input 
+                                type="password" 
+                                placeholder="ADMIN UNLOCK CODE"
+                                value={unlockCode}
+                                onChange={(e) => setUnlockCode(e.target.value)}
+                                className="w-full bg-[#111] border border-red-600/50 rounded-xl px-6 py-4 text-white text-center font-mono text-xl focus:outline-none focus:border-red-600 transition-all placeholder:text-red-900/50"
+                            />
+                            <button 
+                                onClick={() => {
+                                    if (unlockCode === "IEEE-ADMIN") {
+                                        setCheatingDetected(false);
+                                        setUnlockCode("");
+                                        // Ensure fullscreen again
+                                        appWindow.setFocus();
+                                        appWindow.setFullscreen(true);
+                                    } else if (unlockCode) {
+                                        addLog("❌ Incorrect administrative unlock code.");
+                                        setUnlockCode("");
+                                    }
+                                }}
+                                className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xl uppercase tracking-widest transition-all"
                             >
-                                INITIATE REBOOT
+                                Verify Administrator
                             </button>
                         </div>
                     </div>
@@ -692,8 +787,9 @@ function ContestApp({
 
             {/* CONTEST ENDED VIEW - SHOW ONLY LEADERBOARD */}
             {contestEnded && (
-                <div className="fixed inset-0 bg-[#0f0f0f] z-[100] flex flex-col items-center justify-center p-8 overflow-hidden">
+                <div className="fixed inset-0 bg-[#0f0f0f] z-[150] flex flex-col items-center justify-center p-8 overflow-hidden">
                     <div className="w-full max-w-4xl h-full flex flex-col">
+                        {/* ... existing end screen content ... */}
                         <div className="flex items-center justify-between mb-10 shrink-0">
                             <div className="flex items-center gap-4">
                                 <Award className="text-yellow-400" size={48} />

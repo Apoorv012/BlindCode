@@ -57,10 +57,10 @@
       {
         "fullscreen": false,
         "maximized": true,
-        "height": 600,
         "resizable": true,
         "title": "BlindCode",
-        "width": 800
+        "decorations": true,
+        "alwaysOnTop": false
       }
     ]
   }

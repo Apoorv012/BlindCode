@@ -1,17 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Zap, ArrowRight, Loader2, AlertCircle, Users } from "lucide-react";
 import { apiGetContestByCode, apiJoinContest, apiGetContestStatus } from "../services/desktopApi";
+import { ContestStatus, type ContestInfo } from "../types";
 import "./UserDashboard.css";
-
-interface ContestInfo {
-  _id: string;
-  contestCode: string;
-  name: string;
-  duration: number;
-  status: "draft" | "running" | "paused" | "ended";
-  startedAt?: string;
-  problemIds: { _id: string; title: string; difficulty: string }[];
-}
 
 interface UserDashboardProps {
   onContestJoined: (contestId: string, playerName: string, password: string, contestInfo: ContestInfo, participantId: string, score: number, solvedProblemIds: string[]) => void;
@@ -47,7 +38,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     const poll = async () => {
       try {
         const data = await apiGetContestStatus(contest.contestCode);
-        if (data.status === "running") {
+        if (data.status === ContestStatus.RUNNING) {
           if (pollRef.current) clearInterval(pollRef.current);
           onContestJoined(contest._id, teamName, password, contest, participantId, initScore, initSolved);
         }
@@ -72,7 +63,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     setError("");
     try {
       const data = await apiGetContestByCode(code);
-      if (data.status === "ended") {
+      if (data.status === ContestStatus.ENDED) {
         setError("This contest has already ended.");
         return;
       }
@@ -88,7 +79,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
       setInitScore(score);
       setInitSolved(solvedIds);
       
-      if (data.status === "running") {
+      if (data.status === ContestStatus.RUNNING) {
         onContestJoined(data._id, teamName, password, data, joinedParticipantId, score, solvedIds);
       } else {
         setScreen("waiting"); // draft or paused — wait for admin to start
