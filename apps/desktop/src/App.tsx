@@ -439,14 +439,18 @@ function ContestApp({
 
                 if (result.error || result.hasError) {
                     allPassed = false;
+                    const errOutput = result.output || result.error || "Runtime Error";
+                    const isTLE = errOutput.startsWith("TIME LIMIT EXCEEDED");
+                    const isMLE = errOutput.startsWith("MEMORY LIMIT EXCEEDED");
+                    const errLabel = isTLE ? "Time Limit Exceeded" : isMLE ? "Memory Limit Exceeded" : "Runtime/Compile Error";
                     testResults.push({
                         input: tc.hidden ? '(hidden)' : tc.input,
                         expected: tc.hidden ? '(hidden)' : tc.expected,
-                        actual: result.output || result.error || "Runtime Error",
+                        actual: isTLE || isMLE ? errOutput : (tc.hidden ? '(hidden)' : errOutput),
                         status: "error",
                         hidden: tc.hidden
                     });
-                    addLog(`❌ ${label} Failed: Compilation/Runtime Error.`);
+                    addLog(`❌ ${label} Failed: ${errLabel}.`);
                     break;
                 }
 
