@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import './Dashboard.css'
 import {
   apiGetContest, apiGetParticipants, apiPauseContest,
   apiEndContest, apiAddParticipant, apiAddProblemToContest,
-  apiRemoveProblemFromContest
+  apiRemoveProblemFromContest, API_URL
 } from '../api'
-import { ContestStatusEnum } from '../types'
 
+import { io, Socket } from 'socket.io-client'
+
+import { ContestStatusEnum } from '../types'
 type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline' | 'online' | 'unjoined'
 type Tab = 'participants' | 'leaderboard' | 'controls'
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
@@ -23,8 +25,7 @@ interface Participant {
   _id: string
   name: string
   password?: string
-  currentProblemId?: { _id: string; title: string; difficulty: string } | null
-  solvedProblemIds?: string[] // Track solved problems for the spheres
+  currentProblemId?: { title: string; difficulty: string } | null
   reveals: number
   compiles: number
   wrongSubmissions: number
@@ -67,7 +68,6 @@ export default function Dashboard() {
   const [addSuccess, setAddSuccess] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
 
-
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamForm, setTeamForm] = useState({
     name: '', password: '',
@@ -76,7 +76,6 @@ export default function Dashboard() {
   const [manualError, setManualError] = useState('')
   const [addParticipantMsg, setAddParticipantMsg] = useState('')
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null)
-  const pollRef = useRef<any>(null)
 
   const generatePassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -98,7 +97,6 @@ export default function Dashboard() {
     }).catch(console.error)
   }, [contestId])
 
-  // Poll participants every 2s
   useEffect(() => {
     if (!contestId) return
     const fetch = () => {
@@ -107,8 +105,27 @@ export default function Dashboard() {
         .catch(console.error)
     }
     fetch()
-    pollRef.current = setInterval(fetch, 2000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+
+    // Connect WebSockets for real-time tracking
+    const socket: Socket = io(API_URL)
+    socket.emit('admin_join', { contestId })
+    socket.on('participant_update', () => {
+      fetch() // Instant refresh triggered by the backend
+    })
+
+    // Also re-fetch contest data on update to get latest intendedEndTime
+    socket.on('contest_update', () => {
+      apiGetContest(contestId)
+        .then(data => {
+          setContestState(data.status)
+          if (data.intendedEndTime) setIntendedEndTime(data.intendedEndTime)
+        })
+        .catch(console.error)
+    })
+
+    return () => {
+      socket.disconnect()
+    }
   }, [contestId])
 
   // Countdown timer — derived from intendedEndTime, survives reload
@@ -204,13 +221,11 @@ export default function Dashboard() {
   const codingCount = participants.filter(p => p.status === 'coding').length
   const submittedCount = participants.filter(p => p.status === 'submitted').length
   const offlineCount = participants.filter(p => p.status === 'offline').length
-  const maxPossibleScore = contestProblems.reduce((sum, p) => sum + SCORE_MAP[p.difficulty], 0)
 
   return (
     <div className={`app ${theme}`}>
       <header className="header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate('/')}>← Home</button>
           <div className="logo-mark">BC</div>
           <div>
             <div className="logo-title">{contestName || 'Loading...'}</div>
@@ -225,6 +240,7 @@ export default function Dashboard() {
           <div className="dash-timer">{formatTimer(timer)}</div>
         </div>
         <div className="header-right">
+          <button className="back-btn" onClick={() => navigate('/')}>← Home</button>
           <button className="prob-bank-btn" onClick={() => navigate('/problems')}>Problem Bank</button>
           <button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? '☀' : '☾'}
@@ -312,187 +328,142 @@ export default function Dashboard() {
               </table>
             </div>
           </div>
-        )
-        }
+        )}
 
         {/* Leaderboard Tab */}
-        {
-          tab === 'leaderboard' && (
-            <div className="tab-content">
-              <div className="section-header flex-between">
-                <div>
-                  <h2 className="section-title">Leaderboard</h2>
-                  <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300</p>
-                </div>
-                <div className="last-sync-badge">
-                  <span className="sync-dot"></span> Live
-                </div>
-              </div>
-
-              <div className="leaderboard-container">
-                <div
-                  className="lb-header"
-                  // Removed the 140px width that was for Meta
-                  style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
-                >
-                  <div className="lb-col-center">Rank</div>
-                  <div>Name</div>
-                  <div className="lb-col-right">Score</div>
-                  <div className="lb-col-center">Status</div>
-                  {contestProblems.map((prob, i) => (
-                    <div key={prob._id} className="lb-col-center" title={prob.title}>
-                      Q{i + 1}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="leaderboard">
-                  {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24, textAlign: 'center' }}>No participants yet</div>}
-
-                  {leaderboard.map((p, i) => (
-                    <div
-                      key={p._id}
-                      className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}
-                      // Removed the 140px width that was for Meta
-                      style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
-                    >
-                      <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
-                      <div className="lb-name" title={p.name}>{p.name}</div>
-
-                      <div className="lb-score-wrap">
-                        <span className="lb-score-obtained">{p.score}</span>
-                        <span className="lb-score-total">/ {maxPossibleScore}</span>
-                      </div>
-
-                      <div className="lb-col-center">
-                        <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status].split(' ')[0]}</span>
-                      </div>
-
-                      {contestProblems.map(prob => {
-                        const isSolved = p.solvedProblemIds?.includes(prob._id) || false;
-                        const isCurrent = p.currentProblemId?._id === prob._id || p.currentProblemId?.title === prob.title;
-
-                        return (
-                          <div key={prob._id} className="lb-col-center">
-                            <div className={`prob-sphere ${isSolved ? 'solved' : isCurrent ? 'current' : 'unsolved'}`} />
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
+        {tab === 'leaderboard' && (
+          <div className="tab-content">
+            <div className="section-header">
+              <h2 className="section-title">Leaderboard</h2>
+              <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300 · Wrong −50 · Reveal −20</p>
             </div>
-          )
-        }
+            <div className="leaderboard">
+              {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24 }}>No participants yet</div>}
+              {leaderboard.map((p, i) => (
+                <div key={p._id} className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}>
+                  <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+                  <div className="lb-name">{p.name}</div>
+                  <div className="lb-bar-wrap">
+                    <div className="lb-bar" style={{ width: `${Math.min((p.score / 400) * 100, 100)}%` }} />
+                  </div>
+                  <div className="lb-score">{p.score} pts</div>
+                  <div className="lb-meta">
+                    {p.reveals > 0 && <span className="lb-tag lb-reveal">{p.reveals} reveals</span>}
+                    {p.wrongSubmissions > 0 && <span className="lb-tag lb-wrong">{p.wrongSubmissions} wrong</span>}
+                    {p.reveals === 0 && p.wrongSubmissions === 0 && <span className="lb-tag lb-clean">clean</span>}
+                  </div>
+                  <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Controls Tab */}
-        {
-          tab === 'controls' && (
-            <div className="tab-content">
-              <div className="section-header">
-                <h2 className="section-title">Contest Controls</h2>
-                <p className="section-sub">Manage the active contest session</p>
-              </div>
-              <div className="controls-grid">
-
-                <div className="control-card">
-                  <div className="control-label">Contest Status</div>
-                  <div className={`big-status contest-${contestState}`}>
-                    {contestState === ContestStatusEnum.running && <span className="pulse-dot large" />}
-                    {contestState.toUpperCase()}
-                  </div>
-                  <div className="control-actions">
-                    <button className={`btn ${contestState === ContestStatusEnum.running ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
-                      {contestState === ContestStatusEnum.running ? 'Pause Contest' : 'Resume Contest'}
-                    </button>
-                    <button className="btn btn-end" onClick={handleEnd} disabled={ending}>
-                      {ending ? 'Ending...' : 'End Contest'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="control-card">
-                  <div className="control-label">Time Remaining</div>
-                  <div className="duration-display">{formatTimer(timer)}</div>
-                  <div className="dash-timer-sub">Contest duration: {contestDuration} min</div>
-                </div>
-
-                <div className="control-card">
-                  <div className="control-label">Add Participant</div>
-                  <div className="add-problem-hint">Manually add a participant mid-contest</div>
-                  <div className="add-problem-input-row">
-                    <button className="add-problem-btn" onClick={() => setShowTeamModal(true)} style={{ width: '100%' }}>+ Create Team</button>
-                  </div>
-                  {addParticipantMsg && (
-                    <div className={`add-feedback ${addParticipantMsg.includes('Added') ? 'add-success' : 'add-error'}`}>
-                      {addParticipantMsg}
-                    </div>
-                  )}
-                </div>
-
-                <div className="control-card">
-                  <div className="control-label">Quick Stats</div>
-                  <div className="stats-grid">
-                    <div className="stat-box"><div className="stat-val">{participants.length}</div><div className="stat-key">Total</div></div>
-                    <div className="stat-box"><div className="stat-val coding">{codingCount}</div><div className="stat-key">Coding</div></div>
-                    <div className="stat-box"><div className="stat-val submitted">{submittedCount}</div><div className="stat-key">Submitted</div></div>
-                    <div className="stat-box"><div className="stat-val offline">{offlineCount}</div><div className="stat-key">Offline</div></div>
-                  </div>
-                </div>
-
-                <div className="control-card edit-problems-card">
-                  <div className="control-label">
-                    Problems in Contest
-                    <span className="problems-count-badge">{contestProblems.length}</span>
-                  </div>
-                  <div className="edit-problems-list">
-                    {contestProblems.map((prob, i) => (
-                      <div key={prob._id} className="edit-problem-row">
-                        <span className="edit-prob-num">{i + 1}</span>
-                        <span className="edit-prob-code">{prob.code}</span>
-                        <span className="edit-prob-name">{prob.title}</span>
-                        <span className={`diff-badge diff-${prob.difficulty.toLowerCase()}`}>{prob.difficulty}</span>
-                        <span className="edit-prob-score">+{SCORE_MAP[prob.difficulty]}</span>
-                        {removeConfirm === prob._id ? (
-                          <div className="remove-confirm-inline">
-                            <span className="remove-confirm-text">Remove?</span>
-                            <button className="remove-yes-btn" onClick={() => handleRemoveProblem(prob._id)}>Yes</button>
-                            <button className="remove-no-btn" onClick={() => setRemoveConfirm(null)}>No</button>
-                          </div>
-                        ) : (
-                          <button
-                            className="edit-remove-btn"
-                            onClick={() => setRemoveConfirm(prob._id)}
-                            disabled={contestProblems.length <= 1}
-                          >✕</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="add-problem-section">
-                    <div className="add-problem-label">Add Problem by Code</div>
-                    <div className="add-problem-input-row">
-                      <input
-                        className="add-problem-input"
-                        placeholder="e.g. PROB004"
-                        value={addProblemCode}
-                        onChange={e => { setAddProblemCode(e.target.value.toUpperCase()); setAddError(''); setAddSuccess('') }}
-                        onKeyDown={e => e.key === 'Enter' && handleAddProblem()}
-                      />
-                      <button className="add-problem-btn" onClick={handleAddProblem}>+ Add</button>
-                    </div>
-                    {addError && <div className="add-feedback add-error">{addError}</div>}
-                    {addSuccess && <div className="add-feedback add-success">{addSuccess}</div>}
-                  </div>
-                </div>
-
-              </div>
+        {tab === 'controls' && (
+          <div className="tab-content">
+            <div className="section-header">
+              <h2 className="section-title">Contest Controls</h2>
+              <p className="section-sub">Manage the active contest session</p>
             </div>
-          )
-        }
+            <div className="controls-grid">
 
-      </main >
+              <div className="control-card">
+                <div className="control-label">Contest Status</div>
+                <div className={`big-status contest-${contestState}`}>
+                  {contestState === ContestStatusEnum.running && <span className="pulse-dot large" />}
+                  {contestState.toUpperCase()}
+                </div>
+                <div className="control-actions">
+                  <button className={`btn ${contestState === ContestStatusEnum.running ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
+                    {contestState === ContestStatusEnum.running ? 'Pause Contest' : 'Resume Contest'}
+                  </button>
+                  <button className="btn btn-end" onClick={handleEnd} disabled={ending}>
+                    {ending ? 'Ending...' : 'End Contest'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="control-card">
+                <div className="control-label">Time Remaining</div>
+                <div className="duration-display">{formatTimer(timer)}</div>
+                <div className="dash-timer-sub">Contest duration: {contestDuration} min</div>
+              </div>
+
+              <div className="control-card">
+                <div className="control-label">Add Participant</div>
+                <div className="add-problem-hint">Manually add a participant mid-contest</div>
+                <div className="add-problem-input-row">
+                  <button className="add-problem-btn" onClick={() => setShowTeamModal(true)} style={{ width: '100%' }}>+ Create Team</button>
+                </div>
+                {addParticipantMsg && (
+                  <div className={`add-feedback ${addParticipantMsg.includes('Added') ? 'add-success' : 'add-error'}`}>
+                    {addParticipantMsg}
+                  </div>
+                )}
+              </div>
+
+              <div className="control-card">
+                <div className="control-label">Quick Stats</div>
+                <div className="stats-grid">
+                  <div className="stat-box"><div className="stat-val">{participants.length}</div><div className="stat-key">Total</div></div>
+                  <div className="stat-box"><div className="stat-val coding">{codingCount}</div><div className="stat-key">Coding</div></div>
+                  <div className="stat-box"><div className="stat-val submitted">{submittedCount}</div><div className="stat-key">Submitted</div></div>
+                  <div className="stat-box"><div className="stat-val offline">{offlineCount}</div><div className="stat-key">Offline</div></div>
+                </div>
+              </div>
+
+              <div className="control-card edit-problems-card">
+                <div className="control-label">
+                  Problems in Contest
+                  <span className="problems-count-badge">{contestProblems.length}</span>
+                </div>
+                <div className="edit-problems-list">
+                  {contestProblems.map((prob, i) => (
+                    <div key={prob._id} className="edit-problem-row">
+                      <span className="edit-prob-num">{i + 1}</span>
+                      <span className="edit-prob-code">{prob.code}</span>
+                      <span className="edit-prob-name">{prob.title}</span>
+                      <span className={`diff-badge diff-${prob.difficulty.toLowerCase()}`}>{prob.difficulty}</span>
+                      <span className="edit-prob-score">+{SCORE_MAP[prob.difficulty]}</span>
+                      {removeConfirm === prob._id ? (
+                        <div className="remove-confirm-inline">
+                          <span className="remove-confirm-text">Remove?</span>
+                          <button className="remove-yes-btn" onClick={() => handleRemoveProblem(prob._id)}>Yes</button>
+                          <button className="remove-no-btn" onClick={() => setRemoveConfirm(null)}>No</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="edit-remove-btn"
+                          onClick={() => setRemoveConfirm(prob._id)}
+                          disabled={contestProblems.length <= 1}
+                        >✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="add-problem-section">
+                  <div className="add-problem-label">Add Problem by Code</div>
+                  <div className="add-problem-input-row">
+                    <input
+                      className="add-problem-input"
+                      placeholder="e.g. PROB004"
+                      value={addProblemCode}
+                      onChange={e => { setAddProblemCode(e.target.value.toUpperCase()); setAddError(''); setAddSuccess('') }}
+                      onKeyDown={e => e.key === 'Enter' && handleAddProblem()}
+                    />
+                    <button className="add-problem-btn" onClick={handleAddProblem}>+ Add</button>
+                  </div>
+                  {addError && <div className="add-feedback add-error">{addError}</div>}
+                  {addSuccess && <div className="add-feedback add-success">{addSuccess}</div>}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+      </main>
 
       {showTeamModal && (
         <div className="team-modal-overlay" style={{ zIndex: 1000, position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -559,6 +530,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div >
+    </div>
   )
 }
