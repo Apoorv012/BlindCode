@@ -90,15 +90,12 @@ router.post('/:contestId/start', protect, async (req: AuthRequest, res) => {
     }
 
     const now = new Date()
-    let addedTimeMs = contestDoc.duration * 60 * 1000
-    if (contestDoc.remainingTimeMs && contestDoc.remainingTimeMs > 0) {
-      addedTimeMs = contestDoc.remainingTimeMs
-    }
+    // intendedEndTime = startedAt + duration (in minutes)
+    const intendedEndTime = new Date(now.getTime() + contestDoc.duration * 60 * 1000)
 
     contestDoc.status = ContestStatusEnum.running
-    contestDoc.startedAt = contestDoc.startedAt || now
-    contestDoc.intendedEndTime = new Date(now.getTime() + addedTimeMs)
-    contestDoc.remainingTimeMs = 0 
+    contestDoc.startedAt = now
+    contestDoc.intendedEndTime = intendedEndTime
 
     await contestDoc.save()
     res.json({ success: true, contest: contestDoc })
@@ -118,24 +115,10 @@ router.post('/:contestId/pause', protect, async (req: AuthRequest, res) => {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    
-    if (contest.status === ContestStatusEnum.running) {
-       // Transitioning to PAUSED
-       const nowMs = Date.now()
-       const endMs = contest.intendedEndTime?.getTime() || nowMs
-       contest.remainingTimeMs = Math.max(0, endMs - nowMs)
-       contest.status = ContestStatusEnum.paused
-    } else if (contest.status === ContestStatusEnum.paused) {
-       // Transitioning back to RUNNING (this is effectively same as /start conceptually, but handled here for toggle via Dashboard)
-       const nowMs = Date.now()
-       const msLeft = contest.remainingTimeMs || 0
-       contest.intendedEndTime = new Date(nowMs + msLeft)
-       contest.remainingTimeMs = 0
-       contest.status = ContestStatusEnum.running
-    }
-
+    const newStatus = contest.status === ContestStatusEnum.running ? ContestStatusEnum.paused : ContestStatusEnum.running
+    contest.status = newStatus
     await contest.save()
-    res.json({ status: contest.status })
+    res.json({ status: newStatus })
   } catch {
     res.status(500).json({ message: 'Server error' })
   }

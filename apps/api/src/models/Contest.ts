@@ -13,7 +13,7 @@ const memberSchema = new mongoose.Schema({
 }, { _id: false })
 
 const participantSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
   password: { type: String, required: true },
   members: [memberSchema],
   joinedAt: { type: Date, default: Date.now },
@@ -42,8 +42,7 @@ const contestSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   startedAt: Date,
   endedAt: Date,
-  intendedEndTime: Date,
-  remainingTimeMs: Number
+  intendedEndTime: Date
 })
 
 export default mongoose.model('Contest', contestSchema)

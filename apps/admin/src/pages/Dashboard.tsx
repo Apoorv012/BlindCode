@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import './Dashboard.css'
 import {
@@ -59,12 +59,14 @@ export default function Dashboard() {
   const [tab, setTab] = useState<Tab>('participants')
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [timer, setTimer] = useState(0)
+  const [intendedEndTime, setIntendedEndTime] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
 
   const [addProblemCode, setAddProblemCode] = useState('')
   const [addError, setAddError] = useState('')
   const [addSuccess, setAddSuccess] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null)
+
 
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamForm, setTeamForm] = useState({
@@ -82,7 +84,6 @@ export default function Dashboard() {
     setTeamForm(prev => ({ ...prev, password: pass }))
   }
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Fetch contest details
   useEffect(() => {
@@ -92,7 +93,7 @@ export default function Dashboard() {
       if (!nav?.duration) setContestDuration(data.duration)
       setContestState(data.status)
       setContestProblems(data.problemIds || [])
-      setTimer(data.duration * 60)
+      if (data.intendedEndTime) setIntendedEndTime(data.intendedEndTime)
     }).catch(console.error)
   }, [contestId])
 
@@ -109,12 +110,17 @@ export default function Dashboard() {
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [contestId])
 
-  // Countdown timer
+  // Countdown timer — derived from intendedEndTime, survives reload
   useEffect(() => {
-    if (contestState !== ContestStatusEnum.running) return
-    const interval = setInterval(() => setTimer(t => t > 0 ? t - 1 : 0), 1000)
+    if (contestState !== ContestStatusEnum.running || !intendedEndTime) return
+    const tick = () => {
+      const msLeft = new Date(intendedEndTime).getTime() - Date.now()
+      setTimer(Math.max(0, Math.floor(msLeft / 1000)))
+    }
+    tick() // immediately set correct value
+    const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [contestState])
+  }, [contestState, intendedEndTime])
 
   const formatTimer = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, '0')
@@ -288,6 +294,22 @@ export default function Dashboard() {
                             {visiblePasswordId === p._id ? '👁️' : '🔒'}
                           </button>
                         </div>
+                          className="lobby-participant-pass-wrap"
+                          onMouseLeave={() => setVisiblePasswordId(null)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          <span className="lobby-participant-pass" style={{ fontFamily: 'monospace' }}>
+                            {visiblePasswordId === p._id ? p.password : '••••••'}
+                          </span>
+                          <button
+                            className="lobby-pass-eye"
+                            onClick={() => setVisiblePasswordId(p._id)}
+                            title="Show Password"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6 }}
+                          >
+                            {visiblePasswordId === p._id ? '👁️' : '🔒'}
+                          </button>
+                        </div>
                       </td>
                       <td><span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span></td>
                       <td className="td-problem">{p.currentProblemId?.title || '—'}</td>
@@ -300,252 +322,257 @@ export default function Dashboard() {
                       <td className="td-active">{new Date(p.lastActive).toLocaleTimeString()}</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </tbody>
+            </table>
           </div>
-        )}
-
-        {/* Leaderboard Tab */}
-        {tab === 'leaderboard' && (
-          <div className="tab-content">
-            <div className="section-header flex-between">
-              <div>
-                <h2 className="section-title">Leaderboard</h2>
-                <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300</p>
-              </div>
-              <div className="last-sync-badge">
-                <span className="sync-dot"></span> Live
-              </div>
-            </div>
-
-            <div className="leaderboard-container">
-              <div
-                className="lb-header"
-                // Removed the 140px width that was for Meta
-                style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
-              >
-                <div className="lb-col-center">Rank</div>
-                <div>Name</div>
-                <div className="lb-col-right">Score</div>
-                <div className="lb-col-center">Status</div>
-                {contestProblems.map((prob, i) => (
-                  <div key={prob._id} className="lb-col-center" title={prob.title}>
-                    Q{i + 1}
-                  </div>
-                ))}
-              </div>
-
-              <div className="leaderboard">
-                {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24, textAlign: 'center' }}>No participants yet</div>}
-
-                {leaderboard.map((p, i) => (
-                  <div
-                    key={p._id}
-                    className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}
-                    // Removed the 140px width that was for Meta
-                    style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
-                  >
-                    <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
-                    <div className="lb-name" title={p.name}>{p.name}</div>
-
-                    <div className="lb-score-wrap">
-                      <span className="lb-score-obtained">{p.score}</span>
-                      <span className="lb-score-total">/ {maxPossibleScore}</span>
-                    </div>
-
-                    <div className="lb-col-center">
-                      <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status].split(' ')[0]}</span>
-                    </div>
-
-                    {contestProblems.map(prob => {
-                      const isSolved = p.solvedProblemIds?.includes(prob._id) || false;
-                      const isCurrent = p.currentProblemId?._id === prob._id || p.currentProblemId?.title === prob.title;
-
-                      return (
-                        <div key={prob._id} className="lb-col-center">
-                          <div className={`prob-sphere ${isSolved ? 'solved' : isCurrent ? 'current' : 'unsolved'}`} />
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
-        )}
+  )
+}
 
-        {/* Controls Tab */}
-        {tab === 'controls' && (
-          <div className="tab-content">
-            <div className="section-header">
-              <h2 className="section-title">Contest Controls</h2>
-              <p className="section-sub">Manage the active contest session</p>
+{/* Leaderboard Tab */ }
+{
+  tab === 'leaderboard' && (
+    <div className="tab-content">
+      <div className="section-header flex-between">
+        <div>
+          <h2 className="section-title">Leaderboard</h2>
+          <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300</p>
+        </div>
+        <div className="last-sync-badge">
+          <span className="sync-dot"></span> Live
+        </div>
+      </div>
+
+      <div className="leaderboard-container">
+        <div
+          className="lb-header"
+          // Removed the 140px width that was for Meta
+          style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+        >
+          <div className="lb-col-center">Rank</div>
+          <div>Name</div>
+          <div className="lb-col-right">Score</div>
+          <div className="lb-col-center">Status</div>
+          {contestProblems.map((prob, i) => (
+            <div key={prob._id} className="lb-col-center" title={prob.title}>
+              Q{i + 1}
             </div>
-            <div className="controls-grid">
+          ))}
+        </div>
 
-              <div className="control-card">
-                <div className="control-label">Contest Status</div>
-                <div className={`big-status contest-${contestState}`}>
-                  {contestState === ContestStatusEnum.running && <span className="pulse-dot large" />}
-                  {contestState.toUpperCase()}
-                </div>
-                <div className="control-actions">
-                  <button className={`btn ${contestState === ContestStatusEnum.running ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
-                    {contestState === ContestStatusEnum.running ? 'Pause Contest' : 'Resume Contest'}
-                  </button>
-                  <button className="btn btn-end" onClick={handleEnd} disabled={ending}>
-                    {ending ? 'Ending...' : 'End Contest'}
-                  </button>
-                </div>
+        <div className="leaderboard">
+          {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24, textAlign: 'center' }}>No participants yet</div>}
+
+          {leaderboard.map((p, i) => (
+            <div
+              key={p._id}
+              className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}
+              // Removed the 140px width that was for Meta
+              style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+            >
+              <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+              <div className="lb-name" title={p.name}>{p.name}</div>
+
+              <div className="lb-score-wrap">
+                <span className="lb-score-obtained">{p.score}</span>
+                <span className="lb-score-total">/ {maxPossibleScore}</span>
               </div>
 
-              <div className="control-card">
-                <div className="control-label">Time Remaining</div>
-                <div className="duration-display">{formatTimer(timer)}</div>
-                <div className="dash-timer-sub">Contest duration: {contestDuration} min</div>
+              <div className="lb-col-center">
+                <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status].split(' ')[0]}</span>
               </div>
 
-              <div className="control-card">
-                <div className="control-label">Add Participant</div>
-                <div className="add-problem-hint">Manually add a participant mid-contest</div>
-                <div className="add-problem-input-row">
-                  <button className="add-problem-btn" onClick={() => setShowTeamModal(true)} style={{ width: '100%' }}>+ Create Team</button>
-                </div>
-                {addParticipantMsg && (
-                  <div className={`add-feedback ${addParticipantMsg.includes('Added') ? 'add-success' : 'add-error'}`}>
-                    {addParticipantMsg}
+              {contestProblems.map(prob => {
+                const isSolved = p.solvedProblemIds?.includes(prob._id) || false;
+                const isCurrent = p.currentProblemId?._id === prob._id || p.currentProblemId?.title === prob.title;
+
+                return (
+                  <div key={prob._id} className="lb-col-center">
+                    <div className={`prob-sphere ${isSolved ? 'solved' : isCurrent ? 'current' : 'unsolved'}`} />
                   </div>
-                )}
-              </div>
-
-              <div className="control-card">
-                <div className="control-label">Quick Stats</div>
-                <div className="stats-grid">
-                  <div className="stat-box"><div className="stat-val">{participants.length}</div><div className="stat-key">Total</div></div>
-                  <div className="stat-box"><div className="stat-val coding">{codingCount}</div><div className="stat-key">Coding</div></div>
-                  <div className="stat-box"><div className="stat-val submitted">{submittedCount}</div><div className="stat-key">Submitted</div></div>
-                  <div className="stat-box"><div className="stat-val offline">{offlineCount}</div><div className="stat-key">Offline</div></div>
-                </div>
-              </div>
-
-              <div className="control-card edit-problems-card">
-                <div className="control-label">
-                  Problems in Contest
-                  <span className="problems-count-badge">{contestProblems.length}</span>
-                </div>
-                <div className="edit-problems-list">
-                  {contestProblems.map((prob, i) => (
-                    <div key={prob._id} className="edit-problem-row">
-                      <span className="edit-prob-num">{i + 1}</span>
-                      <span className="edit-prob-code">{prob.code}</span>
-                      <span className="edit-prob-name">{prob.title}</span>
-                      <span className={`diff-badge diff-${prob.difficulty.toLowerCase()}`}>{prob.difficulty}</span>
-                      <span className="edit-prob-score">+{SCORE_MAP[prob.difficulty]}</span>
-                      {removeConfirm === prob._id ? (
-                        <div className="remove-confirm-inline">
-                          <span className="remove-confirm-text">Remove?</span>
-                          <button className="remove-yes-btn" onClick={() => handleRemoveProblem(prob._id)}>Yes</button>
-                          <button className="remove-no-btn" onClick={() => setRemoveConfirm(null)}>No</button>
-                        </div>
-                      ) : (
-                        <button
-                          className="edit-remove-btn"
-                          onClick={() => setRemoveConfirm(prob._id)}
-                          disabled={contestProblems.length <= 1}
-                        >✕</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="add-problem-section">
-                  <div className="add-problem-label">Add Problem by Code</div>
-                  <div className="add-problem-input-row">
-                    <input
-                      className="add-problem-input"
-                      placeholder="e.g. PROB004"
-                      value={addProblemCode}
-                      onChange={e => { setAddProblemCode(e.target.value.toUpperCase()); setAddError(''); setAddSuccess('') }}
-                      onKeyDown={e => e.key === 'Enter' && handleAddProblem()}
-                    />
-                    <button className="add-problem-btn" onClick={handleAddProblem}>+ Add</button>
-                  </div>
-                  {addError && <div className="add-feedback add-error">{addError}</div>}
-                  {addSuccess && <div className="add-feedback add-success">{addSuccess}</div>}
-                </div>
-              </div>
-
+                )
+              })}
             </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+{/* Controls Tab */ }
+{
+  tab === 'controls' && (
+    <div className="tab-content">
+      <div className="section-header">
+        <h2 className="section-title">Contest Controls</h2>
+        <p className="section-sub">Manage the active contest session</p>
+      </div>
+      <div className="controls-grid">
+
+        <div className="control-card">
+          <div className="control-label">Contest Status</div>
+          <div className={`big-status contest-${contestState}`}>
+            {contestState === ContestStatusEnum.running && <span className="pulse-dot large" />}
+            {contestState.toUpperCase()}
           </div>
-        )}
-
-      </main>
-
-      {showTeamModal && (
-        <div className="team-modal-overlay" style={{ zIndex: 1000, position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="team-modal" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '500px' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '1.5rem', color: '#fff' }}>Create New Team</h3>
-
-            <div className="modal-input-group" style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Team Name <span className="req" style={{ color: 'red' }}>*</span></label>
-              <input value={teamForm.name} onChange={e => setTeamForm({ ...teamForm, name: e.target.value })} placeholder="e.g. Lambda" style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-            </div>
-
-            <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-              <div className="modal-input-group" style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 1 Name <span className="req" style={{ color: 'red' }}>*</span></label>
-                <input value={teamForm.members[0].name} onChange={e => {
-                  const newMembers = [...teamForm.members]
-                  newMembers[0].name = e.target.value
-                  setTeamForm({ ...teamForm, members: newMembers })
-                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-              </div>
-              <div className="modal-input-group" style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 1 <span className="req" style={{ color: 'red' }}>*</span></label>
-                <input type="number" value={teamForm.members[0].enroll} onChange={e => {
-                  const newMembers = [...teamForm.members]
-                  newMembers[0].enroll = e.target.value
-                  setTeamForm({ ...teamForm, members: newMembers })
-                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-              </div>
-            </div>
-
-            <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-              <div className="modal-input-group" style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 2 Name (Opt)</label>
-                <input value={teamForm.members[1].name} onChange={e => {
-                  const newMembers = [...teamForm.members]
-                  newMembers[1].name = e.target.value
-                  setTeamForm({ ...teamForm, members: newMembers })
-                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-              </div>
-              <div className="modal-input-group" style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 2 (Opt)</label>
-                <input type="number" value={teamForm.members[1].enroll} onChange={e => {
-                  const newMembers = [...teamForm.members]
-                  newMembers[1].enroll = e.target.value
-                  setTeamForm({ ...teamForm, members: newMembers })
-                }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-              </div>
-            </div>
-
-            <div className="modal-input-group row-align" style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', marginBottom: '24px' }}>
-              <div className="flex-1" style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Password <span className="req" style={{ color: 'red' }}>*</span></label>
-                <input value={teamForm.password} onChange={e => setTeamForm({ ...teamForm, password: e.target.value })} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
-              </div>
-              <button className="manual-add-btn pass-btn" onClick={generatePassword} style={{ padding: '12px 24px', background: '#2c3e50', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Generate</button>
-            </div>
-
-            {manualError && <div className="manual-add-error" style={{ color: '#ef4444', background: '#ef444420', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>{manualError}</div>}
-
-            <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #3c3c3c', paddingTop: '24px' }}>
-              <button className="lobby-back-btn" onClick={() => setShowTeamModal(false)} style={{ padding: '10px 20px', background: 'transparent', color: '#858585', border: '1px solid #3c3c3c', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
-              <button className="manual-add-btn" onClick={handleCreateTeam} style={{ padding: '10px 20px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Team</button>
-            </div>
+          <div className="control-actions">
+            <button className={`btn ${contestState === ContestStatusEnum.running ? 'btn-pause' : 'btn-resume'}`} onClick={handlePause}>
+              {contestState === ContestStatusEnum.running ? 'Pause Contest' : 'Resume Contest'}
+            </button>
+            <button className="btn btn-end" onClick={handleEnd} disabled={ending}>
+              {ending ? 'Ending...' : 'End Contest'}
+            </button>
           </div>
         </div>
-      )}
+
+        <div className="control-card">
+          <div className="control-label">Time Remaining</div>
+          <div className="duration-display">{formatTimer(timer)}</div>
+          <div className="dash-timer-sub">Contest duration: {contestDuration} min</div>
+        </div>
+
+        <div className="control-card">
+          <div className="control-label">Add Participant</div>
+          <div className="add-problem-hint">Manually add a participant mid-contest</div>
+          <div className="add-problem-input-row">
+            <button className="add-problem-btn" onClick={() => setShowTeamModal(true)} style={{ width: '100%' }}>+ Create Team</button>
+          </div>
+          {addParticipantMsg && (
+            <div className={`add-feedback ${addParticipantMsg.includes('Added') ? 'add-success' : 'add-error'}`}>
+              {addParticipantMsg}
+            </div>
+          )}
+        </div>
+
+        <div className="control-card">
+          <div className="control-label">Quick Stats</div>
+          <div className="stats-grid">
+            <div className="stat-box"><div className="stat-val">{participants.length}</div><div className="stat-key">Total</div></div>
+            <div className="stat-box"><div className="stat-val coding">{codingCount}</div><div className="stat-key">Coding</div></div>
+            <div className="stat-box"><div className="stat-val submitted">{submittedCount}</div><div className="stat-key">Submitted</div></div>
+            <div className="stat-box"><div className="stat-val offline">{offlineCount}</div><div className="stat-key">Offline</div></div>
+          </div>
+        </div>
+
+        <div className="control-card edit-problems-card">
+          <div className="control-label">
+            Problems in Contest
+            <span className="problems-count-badge">{contestProblems.length}</span>
+          </div>
+          <div className="edit-problems-list">
+            {contestProblems.map((prob, i) => (
+              <div key={prob._id} className="edit-problem-row">
+                <span className="edit-prob-num">{i + 1}</span>
+                <span className="edit-prob-code">{prob.code}</span>
+                <span className="edit-prob-name">{prob.title}</span>
+                <span className={`diff-badge diff-${prob.difficulty.toLowerCase()}`}>{prob.difficulty}</span>
+                <span className="edit-prob-score">+{SCORE_MAP[prob.difficulty]}</span>
+                {removeConfirm === prob._id ? (
+                  <div className="remove-confirm-inline">
+                    <span className="remove-confirm-text">Remove?</span>
+                    <button className="remove-yes-btn" onClick={() => handleRemoveProblem(prob._id)}>Yes</button>
+                    <button className="remove-no-btn" onClick={() => setRemoveConfirm(null)}>No</button>
+                  </div>
+                ) : (
+                  <button
+                    className="edit-remove-btn"
+                    onClick={() => setRemoveConfirm(prob._id)}
+                    disabled={contestProblems.length <= 1}
+                  >✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="add-problem-section">
+            <div className="add-problem-label">Add Problem by Code</div>
+            <div className="add-problem-input-row">
+              <input
+                className="add-problem-input"
+                placeholder="e.g. PROB004"
+                value={addProblemCode}
+                onChange={e => { setAddProblemCode(e.target.value.toUpperCase()); setAddError(''); setAddSuccess('') }}
+                onKeyDown={e => e.key === 'Enter' && handleAddProblem()}
+              />
+              <button className="add-problem-btn" onClick={handleAddProblem}>+ Add</button>
+            </div>
+            {addError && <div className="add-feedback add-error">{addError}</div>}
+            {addSuccess && <div className="add-feedback add-success">{addSuccess}</div>}
+          </div>
+        </div>
+
+      </div>
     </div>
+  )
+}
+
+      </main >
+
+  { showTeamModal && (
+    <div className="team-modal-overlay" style={{ zIndex: 1000, position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="team-modal" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '500px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '24px', fontSize: '1.5rem', color: '#fff' }}>Create New Team</h3>
+
+        <div className="modal-input-group" style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Team Name <span className="req" style={{ color: 'red' }}>*</span></label>
+          <input value={teamForm.name} onChange={e => setTeamForm({ ...teamForm, name: e.target.value })} placeholder="e.g. Lambda" style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+        </div>
+
+        <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+          <div className="modal-input-group" style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 1 Name <span className="req" style={{ color: 'red' }}>*</span></label>
+            <input value={teamForm.members[0].name} onChange={e => {
+              const newMembers = [...teamForm.members]
+              newMembers[0].name = e.target.value
+              setTeamForm({ ...teamForm, members: newMembers })
+            }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+          </div>
+          <div className="modal-input-group" style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 1 <span className="req" style={{ color: 'red' }}>*</span></label>
+            <input type="number" value={teamForm.members[0].enroll} onChange={e => {
+              const newMembers = [...teamForm.members]
+              newMembers[0].enroll = e.target.value
+              setTeamForm({ ...teamForm, members: newMembers })
+            }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+          </div>
+        </div>
+
+        <div className="modal-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+          <div className="modal-input-group" style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Member 2 Name (Opt)</label>
+            <input value={teamForm.members[1].name} onChange={e => {
+              const newMembers = [...teamForm.members]
+              newMembers[1].name = e.target.value
+              setTeamForm({ ...teamForm, members: newMembers })
+            }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+          </div>
+          <div className="modal-input-group" style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Enroll 2 (Opt)</label>
+            <input type="number" value={teamForm.members[1].enroll} onChange={e => {
+              const newMembers = [...teamForm.members]
+              newMembers[1].enroll = e.target.value
+              setTeamForm({ ...teamForm, members: newMembers })
+            }} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+          </div>
+        </div>
+
+        <div className="modal-input-group row-align" style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', marginBottom: '24px' }}>
+          <div className="flex-1" style={{ flex: 1 }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#858585', marginBottom: '8px' }}>Password <span className="req" style={{ color: 'red' }}>*</span></label>
+            <input value={teamForm.password} onChange={e => setTeamForm({ ...teamForm, password: e.target.value })} style={{ width: '100%', padding: '12px', background: '#1e1e1e', border: '1px solid #3c3c3c', borderRadius: '8px', color: '#fff' }} />
+          </div>
+          <button className="manual-add-btn pass-btn" onClick={generatePassword} style={{ padding: '12px 24px', background: '#2c3e50', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Generate</button>
+        </div>
+
+        {manualError && <div className="manual-add-error" style={{ color: '#ef4444', background: '#ef444420', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>{manualError}</div>}
+
+        <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #3c3c3c', paddingTop: '24px' }}>
+          <button className="lobby-back-btn" onClick={() => setShowTeamModal(false)} style={{ padding: '10px 20px', background: 'transparent', color: '#858585', border: '1px solid #3c3c3c', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
+          <button className="manual-add-btn" onClick={handleCreateTeam} style={{ padding: '10px 20px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Team</button>
+        </div>
+      </div>
+    </div>
+  )}
+    </div >
   )
 }
