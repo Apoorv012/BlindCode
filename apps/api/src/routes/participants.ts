@@ -1,6 +1,7 @@
 import express from 'express'
 import Contest, { ContestStatusEnum } from '../models/Contest'
 import { protect, AuthRequest } from '../middleware/auth'
+import { getIo } from '../socket'
 
 const router = express.Router({ mergeParams: true })
 
@@ -269,6 +270,11 @@ router.post('/:participantId/submit', async (req: express.Request<{ contestId: s
     participant.lastActive = new Date();
 
     await contest.save();
+
+    try {
+      getIo().to(`admin_${contest.contestCode}`).emit('participant_update');
+    } catch (e) {}
+
     res.json({ success: true, passed: true, scoreEarned: levelScore });
   } catch (err) {
     console.error(err);

@@ -8,9 +8,14 @@ import contestRoutes from './routes/contests'
 import participantRoutes from './routes/participants'
 import resultRoutes from './routes/results'
 
+import http from 'http'
+import { initSocket } from './socket'
+
 dotenv.config()
 
 const app = express()
+const server = http.createServer(app)
+initSocket(server)
 
 app.use(cors())
 app.use(express.json())
@@ -29,7 +34,7 @@ const PORT = process.env.PORT || 4000
 
 // Start server ONLY after DB is connected
 connectDB().then(() => {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`)
   })
 })

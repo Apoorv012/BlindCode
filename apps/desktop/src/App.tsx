@@ -5,7 +5,8 @@ import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData } from "./components/ProblemSidebar";
 import { LogOut, Trophy, Target, Clock, Zap, Loader2 } from "lucide-react";
 import type { Challenge } from "./data/questions";
-import { apiGetProblem, apiHeartbeat, apiSubmitScore } from "./services/desktopApi";
+import { apiGetProblem, apiSubmitScore, API_URL } from "./services/desktopApi";
+import { io, Socket } from "socket.io-client";
 import { compileCode } from "./services/api";
 import UserDashboard from "./pages/UserDashboard";
 import "./App.css";
@@ -18,6 +19,7 @@ export interface ContestInfo {
     duration: number;
     status: "draft" | "running" | "paused" | "ended";
     startedAt?: string;
+    intendedEndTime?: string;
     problemIds: { _id: string; title: string; difficulty: string }[];
 }
 
@@ -87,6 +89,7 @@ function ContestApp({
     const [language, setLanguage] = useState("cpp");
     const [isCompiling, setIsCompiling] = useState(false);
     const [contestTimeLeft, setContestTimeLeft] = useState(0);
+    const [socket, setSocket] = useState<Socket | null>(null);
 
     // Heartbeat logic
     const statusTracker = useRef({
@@ -162,13 +165,32 @@ function ContestApp({
     }, [problemsLoading]);
 
     useEffect(() => {
-        let contestEndTime = contestInfo.startedAt ? new Date(contestInfo.startedAt).getTime() + (contestInfo.duration * 60000) : Date.now() + (contestInfo.duration * 60000);
+        let contestEndTime = contestInfo.intendedEndTime 
+            ? new Date(contestInfo.intendedEndTime).getTime() 
+            : (contestInfo.startedAt ? new Date(contestInfo.startedAt).getTime() + (contestInfo.duration * 60000) : Date.now() + (contestInfo.duration * 60000));
+        
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
             setContestTimeLeft(Math.floor(Math.max(0, contestEndTime - Date.now()) / 1000));
         }, 1000);
         return () => clearInterval(interval);
     }, [contestInfo]);
+
+    useEffect(() => {
+        const newSocket = io(API_URL);
+        setSocket(newSocket);
+        
+        newSocket.on("connect", () => {
+            newSocket.emit("participant_join", {
+                contestId: contestInfo.contestCode,
+                participantId: participantId
+            });
+        });
+
+        return () => {
+            newSocket.disconnect();
+        };
+    }, [contestInfo.contestCode, participantId]);
 
     // We keep these in refs so the heartbeat interval doesn't reset on every minor state change
     const latestBeatPayload = useRef({
@@ -188,14 +210,18 @@ function ContestApp({
         let timeoutId: ReturnType<typeof setTimeout>;
 
         const beat = () => {
-            const currentObj = latestBeatPayload.current;
-            apiHeartbeat(currentObj.contestCode, currentObj.participantId, {
-                status: statusTracker.current.compiles > 0 ? 'coding' : 'idle', // general indication
-                compiles: statusTracker.current.compiles,
-                wrongSubmissions: statusTracker.current.wrongSubmissions,
-                reveals: statusTracker.current.reveals,
-                currentProblemId: currentObj.problemId
-            });
+            if (socket && socket.connected) {
+                const currentObj = latestBeatPayload.current;
+                socket.emit("update_status", {
+                    contestId: currentObj.contestCode,
+                    participantId: currentObj.participantId,
+                    status: statusTracker.current.compiles > 0 ? 'coding' : 'idle',
+                    compiles: statusTracker.current.compiles,
+                    wrongSubmissions: statusTracker.current.wrongSubmissions,
+                    reveals: statusTracker.current.reveals,
+                    currentProblemId: currentObj.problemId
+                });
+            }
             // 10s + random 0 to 2 seconds
             timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
         };
@@ -204,7 +230,7 @@ function ContestApp({
         timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
         
         return () => clearTimeout(timeoutId);
-    }, []);
+    }, [socket]);
 
     useEffect(() => {
         const handleVisibilityChange = () => {

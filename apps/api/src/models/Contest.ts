@@ -41,7 +41,9 @@ const contestSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
   startedAt: Date,
-  endedAt: Date
+  endedAt: Date,
+  intendedEndTime: Date,
+  remainingTimeMs: Number
 })
 
 export default mongoose.model('Contest', contestSchema)

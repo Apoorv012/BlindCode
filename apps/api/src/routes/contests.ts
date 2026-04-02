@@ -83,16 +83,25 @@ router.get('/:contestId', protect, async (req: AuthRequest, res) => {
 // POST /contests/:contestId/start — sets status to 'running' (user app polls for this)
 router.post('/:contestId/start', protect, async (req: AuthRequest, res) => {
   try {
-    const contest = await Contest.findOneAndUpdate(
-      { contestCode: req.params.contestId, adminId: req.adminId },
-      { status: ContestStatusEnum.running, startedAt: new Date() },
-      { new: true }
-    )
-    if (!contest) {
+    const contestDoc = await Contest.findOne({ contestCode: req.params.contestId, adminId: req.adminId })
+    if (!contestDoc) {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    res.json({ success: true, contest })
+
+    const now = new Date()
+    let addedTimeMs = contestDoc.duration * 60 * 1000
+    if (contestDoc.remainingTimeMs && contestDoc.remainingTimeMs > 0) {
+      addedTimeMs = contestDoc.remainingTimeMs
+    }
+
+    contestDoc.status = ContestStatusEnum.running
+    contestDoc.startedAt = contestDoc.startedAt || now
+    contestDoc.intendedEndTime = new Date(now.getTime() + addedTimeMs)
+    contestDoc.remainingTimeMs = 0 
+
+    await contestDoc.save()
+    res.json({ success: true, contest: contestDoc })
   } catch {
     res.status(500).json({ message: 'Server error' })
   }
@@ -109,10 +118,24 @@ router.post('/:contestId/pause', protect, async (req: AuthRequest, res) => {
       res.status(404).json({ message: 'Contest not found' })
       return
     }
-    const newStatus = contest.status === ContestStatusEnum.running ? ContestStatusEnum.paused : ContestStatusEnum.running
-    contest.status = newStatus
+    
+    if (contest.status === ContestStatusEnum.running) {
+       // Transitioning to PAUSED
+       const nowMs = Date.now()
+       const endMs = contest.intendedEndTime?.getTime() || nowMs
+       contest.remainingTimeMs = Math.max(0, endMs - nowMs)
+       contest.status = ContestStatusEnum.paused
+    } else if (contest.status === ContestStatusEnum.paused) {
+       // Transitioning back to RUNNING (this is effectively same as /start conceptually, but handled here for toggle via Dashboard)
+       const nowMs = Date.now()
+       const msLeft = contest.remainingTimeMs || 0
+       contest.intendedEndTime = new Date(nowMs + msLeft)
+       contest.remainingTimeMs = 0
+       contest.status = ContestStatusEnum.running
+    }
+
     await contest.save()
-    res.json({ status: newStatus })
+    res.json({ status: contest.status })
   } catch {
     res.status(500).json({ message: 'Server error' })
   }

@@ -4,8 +4,10 @@ import './Dashboard.css'
 import {
   apiGetContest, apiGetParticipants, apiPauseContest,
   apiEndContest, apiAddParticipant, apiAddProblemToContest,
-  apiRemoveProblemFromContest
+  apiRemoveProblemFromContest, API_URL
 } from '../api'
+
+import { io, Socket } from 'socket.io-client'
 
 import { ContestStatusEnum } from '../types'
 type ParticipantStatus = 'coding' | 'idle' | 'submitted' | 'offline' | 'online' | 'unjoined'
@@ -95,7 +97,6 @@ export default function Dashboard() {
     }).catch(console.error)
   }, [contestId])
 
-  // Poll participants every 2s
   useEffect(() => {
     if (!contestId) return
     const fetch = () => {
@@ -104,8 +105,21 @@ export default function Dashboard() {
         .catch(console.error)
     }
     fetch()
-    pollRef.current = setInterval(fetch, 2000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    
+    // Connect WebSockets for real-time tracking
+    const socket: Socket = io(API_URL)
+    socket.emit('admin_join', { contestId })
+    socket.on('participant_update', () => {
+      fetch() // Instant refresh triggered by the backend
+    })
+
+    // Fallback polling for slow syncs
+    pollRef.current = setInterval(fetch, 15000)
+    
+    return () => { 
+      if (pollRef.current) clearInterval(pollRef.current) 
+      socket.disconnect()
+    }
   }, [contestId])
 
   // Countdown timer
