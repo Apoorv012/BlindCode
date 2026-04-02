@@ -27,18 +27,14 @@ export default function CodeWorkspace({
     const [currentLine, setCurrentLine] = useState<number>(0);
     const decorationsRef = useRef<string[]>([]);
 
-    // NEW: Keep track of lines the user has visited
-    const visitedLinesRef = useRef<Set<number>>(new Set());
-
     const handleEditorDidMount: OnMount = (editor, monaco) => {
         editorRef.current = editor;
         monacoRef.current = monaco;
 
-        // Track cursor position and add to visited lines
+        // Track cursor position
         editor.onDidChangeCursorPosition((e: any) => {
-            const lineIndex = e.position.lineNumber - 1;
-            visitedLinesRef.current.add(lineIndex); // Mark this line as visited
-            setCurrentLine(lineIndex);
+            // Monaco lines are 1-indexed, we want 0-indexed to match computation logic
+            setCurrentLine(e.position.lineNumber - 1);
         });
 
         // Intercept right click to show our custom Reveal context menu
@@ -52,12 +48,10 @@ export default function CodeWorkspace({
             }
         });
 
-        // Initialize cursor line and mark it as visited
+        // Initialize cursor line
         const pos = editor.getPosition();
         if (pos) {
-            const initialLine = pos.lineNumber - 1;
-            visitedLinesRef.current.add(initialLine);
-            setCurrentLine(initialLine);
+            setCurrentLine(pos.lineNumber - 1);
         }
     };
 
@@ -77,13 +71,11 @@ export default function CodeWorkspace({
 
         const lineCount = model.getLineCount();
         const newDecorations: any[] = [];
-
         for (let i = 0; i < lineCount; i++) {
             let className = "blur-line-clear";
 
             if (isBlurred) {
                 const distance = Math.abs(currentLine - i);
-
                 if (distance === 0) {
                     className = "blur-line-focus"; // 15%
                 } else if (distance === 1) {
@@ -93,12 +85,7 @@ export default function CodeWorkspace({
                 } else if (distance === 3) {
                     className = "blur-line-3"; // 70%
                 } else {
-                    // NEW LOGIC: Check if the line was previously visited
-                    if (visitedLinesRef.current.has(i)) {
-                        className = "blur-line-max"; // Keep it partially visible
-                    } else {
-                        className = "blur-line-max"; // 100% hidden if never visited
-                    }
+                    className = "blur-line-max"; // 100%
                 }
             }
 
