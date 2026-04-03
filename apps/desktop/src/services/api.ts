@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/tauri";
 
 const ENV = import.meta.env.TAURI_ENV;
 const API_URL = ENV === "CLOUD" ? import.meta.env.TAURI_BACKEND_URL_CLOUD : import.meta.env.TAURI_BACKEND_URL_LOCAL;
@@ -10,10 +9,8 @@ export interface CompilerResponse {
 }
 
 /**
- * Compile and execute code locally via Tauri native commands.
- * This runs g++, python, or node directly on the user's system.
+ * Compile and execute code via external Piston API.
  */
-// NAYA: 'input' parameter add kiya (default value empty string)
 export async function compileCode(code: string, language: string, input: string = ""): Promise<CompilerResponse> {
     if (!code.trim()) {
         return { output: "(No code to execute)", hasError: false };
@@ -23,29 +20,65 @@ export async function compileCode(code: string, language: string, input: string 
         return { output: "", hasError: true, error: "Language is required" };
     }
 
+    const versionMap: Record<string, string> = {
+        "c++": "10.2.0",
+        "cpp": "10.2.0",
+        "python": "3.12.0",
+        "java": "15.0.2"
+    };
+
+    const pistonLang = language === "cpp" ? "c++" : language;
+    const version = versionMap[pistonLang] || "1.0.0";
+
     try {
-        const result = await invoke<CompilerResponse>("execute_code", {
-            code: code,
-            language: language,
-            input: input, // NAYA: Rust backend ko input pass kar rahe hain
+        const response = await fetch("http://13.206.10.105:2000/api/v2/execute", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                language: pistonLang,
+                version: version,
+                files: [
+                    { content: code }
+                ],
+                stdin: input
+            })
         });
 
-        if (!result.output && !result.hasError) {
-            result.output = "(No output)";
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status}: ${response.statusText}`);
         }
 
-        return result;
-    } catch (error) {
-        console.error("Tauri compilation invocation failed:", error);
+        const result = await response.json();
 
-        if (!window.__TAURI__) {
+        if (result.compile && result.compile.code !== 0) {
             return {
-                output: "",
+                output: result.compile.stderr || result.compile.output || "",
                 hasError: true,
-                error: "Tauri context not found. Please run the app using 'pnpm tauri dev' and use the app window, not Chrome.",
+                error: result.compile.stderr || result.compile.output
             };
         }
 
+        if (result.run && result.run.code !== 0) {
+            return {
+                output: result.run.stderr || result.run.output || "",
+                hasError: true,
+                error: result.run.stderr || result.run.output
+            };
+        }
+
+        let out = result.run ? result.run.output : "";
+        if (!out) {
+            out = "(No output)";
+        }
+
+        return {
+            output: out,
+            hasError: false
+        };
+    } catch (error) {
+        console.error("Compilation failed:", error);
         return {
             output: "",
             hasError: true,

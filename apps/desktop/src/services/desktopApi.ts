@@ -101,7 +101,7 @@ import type { Challenge } from '../data/questions'
 const STARTER_CODE: Record<string, string> = {
   cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    \n    return 0;\n}`,
   python: `# Write your solution here\n`,
-  javascript: `// Write your solution here\n`,
+  java: `public class Main {\n    public static void main(String[] args) {\n        // Write your solution here\n        \n    }\n}`,
 }
 
 export const apiGetProblem = async (problemId: string): Promise<Challenge> => {

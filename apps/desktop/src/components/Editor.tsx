@@ -22,7 +22,7 @@ interface EditorProps {
 const LANGUAGES = [
     { id: "cpp", name: "C++", icon: "⚡", extension: ".cpp" },
     { id: "python", name: "Python", icon: "🐍", extension: ".py" },
-    { id: "javascript", name: "JavaScript", icon: "JS", extension: ".js" },
+    { id: "java", name: "Java", icon: "☕", extension: ".java" },
 ];
 
 export default function Editor({
