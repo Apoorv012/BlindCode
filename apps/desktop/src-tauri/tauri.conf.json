@@ -57,12 +57,15 @@
     },
     "windows": [
       {
-        "fullscreen": false,
-        "maximized": true,
-        "resizable": true,
+        "label": "main",
         "title": "BlindCode",
+        "fullscreen": false,
+        "maximized": false,
+        "resizable": true,
+        "minimizable": false,
         "decorations": true,
-        "alwaysOnTop": false
+        "alwaysOnTop": true,
+        "skipTaskbar": false
       }
     ]
   }

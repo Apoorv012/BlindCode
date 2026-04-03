@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import './Dashboard.css'
 import {
@@ -25,7 +25,8 @@ interface Participant {
   _id: string
   name: string
   password?: string
-  currentProblemId?: { title: string; difficulty: string } | null
+  currentProblemId?: { _id: string; title: string; difficulty: string } | null
+  solvedProblemIds?: string[] // NAYA: Spheres ke liye
   reveals: number
   compiles: number
   wrongSubmissions: number
@@ -62,6 +63,7 @@ export default function Dashboard() {
   const [timer, setTimer] = useState(0)
   const [intendedEndTime, setIntendedEndTime] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
+  const socketRef = useRef<Socket | null>(null)
 
   const [addProblemCode, setAddProblemCode] = useState('')
   const [addError, setAddError] = useState('')
@@ -84,7 +86,6 @@ export default function Dashboard() {
     setTeamForm(prev => ({ ...prev, password: pass }))
   }
 
-
   // Fetch contest details
   useEffect(() => {
     if (!contestId) return
@@ -100,30 +101,30 @@ export default function Dashboard() {
   useEffect(() => {
     if (!contestId) return
     const fetch = () => {
-      apiGetParticipants(contestId)
-        .then(data => setParticipants(data))
-        .catch(console.error)
+      apiGetParticipants(contestId).then(data => setParticipants(data)).catch(console.error)
     }
     fetch()
 
-    // Connect WebSockets for real-time tracking
+    // ✨ NAYA: Socket ko ref mein save kar liya
     const socket: Socket = io(API_URL)
-    socket.emit('admin_join', { contestId })
-    socket.on('participant_update', () => {
-      fetch() // Instant refresh triggered by the backend
-    })
+    socketRef.current = socket
 
-    // Also re-fetch contest data on update to get latest intendedEndTime
-    socket.on('contest_update', () => {
-      apiGetContest(contestId)
-        .then(data => {
-          setContestState(data.status)
-          if (data.intendedEndTime) setIntendedEndTime(data.intendedEndTime)
-          if (data.status === ContestStatusEnum.ended) {
-            setTab('leaderboard')
-          }
-        })
-        .catch(console.error)
+    socket.emit('admin_join', { contestId })
+    socket.on('participant_update', () => { fetch() })
+
+    socket.on('contest_update', (payload) => {
+      // Direct payload check for instant UI update
+      if (payload && payload.status === 'ended') {
+        setContestState(ContestStatusEnum.ended)
+        setTab('leaderboard')
+        return;
+      }
+
+      apiGetContest(contestId).then(data => {
+        setContestState(data.status)
+        if (data.intendedEndTime) setIntendedEndTime(data.intendedEndTime)
+        if (data.status === ContestStatusEnum.ended) setTab('leaderboard')
+      }).catch(console.error)
     })
 
     return () => {
@@ -162,13 +163,26 @@ export default function Dashboard() {
   }
 
   const handleEnd = async () => {
-    setEnding(true)
+    if (!window.confirm("Are you sure you want to officially end the contest for all participants?")) return;
+
+    setEnding(true);
+
     try {
-      await apiEndContest(contestId!)
-      navigate(`/results/${contestId}`)
+      // 1. DIRECT SOCKET COMMAND FIRE KARO
+      if (socketRef.current) {
+        socketRef.current.emit('admin_end_contest', { contestId });
+      } else {
+        console.error("Socket not connected!");
+      }
+
+      // 2. Admin ko turant results page par bhej do
+      setTimeout(() => {
+        navigate(`/results/${contestId}`);
+      }, 500);
+
     } catch (err) {
-      console.error(err)
-      setEnding(false)
+      console.error(err);
+      setEnding(false);
     }
   }
 
@@ -228,6 +242,7 @@ export default function Dashboard() {
   const codingCount = participants.filter(p => p.status === 'coding').length
   const submittedCount = participants.filter(p => p.status === 'submitted').length
   const offlineCount = participants.filter(p => p.status === 'offline').length
+  const maxPossibleScore = contestProblems.reduce((sum, p) => sum + SCORE_MAP[p.difficulty], 0)
 
   return (
     <div className={`app ${theme}`}>
@@ -337,31 +352,72 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Leaderboard Tab */}
+        {/* NAYA LEADERBOARD TAB (LeetCode Style) */}
         {tab === 'leaderboard' && (
           <div className="tab-content">
-            <div className="section-header">
-              <h2 className="section-title">Leaderboard</h2>
-              <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300 · Wrong −50 · Reveal −20</p>
+            <div className="section-header flex-between">
+              <div>
+                <h2 className="section-title">Leaderboard</h2>
+                <p className="section-sub">Ranked by score — Easy +100, Medium +200, Hard +300</p>
+              </div>
+              <div className="last-sync-badge">
+                <span className="sync-dot"></span> Live
+              </div>
             </div>
-            <div className="leaderboard">
-              {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24 }}>No participants yet</div>}
-              {leaderboard.map((p, i) => (
-                <div key={p._id} className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}>
-                  <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
-                  <div className="lb-name">{p.name}</div>
-                  <div className="lb-bar-wrap">
-                    <div className="lb-bar" style={{ width: `${Math.min((p.score / 400) * 100, 100)}%` }} />
+
+            <div className="leaderboard-container">
+              <div
+                className="lb-header"
+                style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+              >
+                <div className="lb-col-center">Rank</div>
+                <div>Name</div>
+                <div className="lb-col-right">Score</div>
+                <div className="lb-col-center">Status</div>
+                {contestProblems.map((prob, i) => (
+                  <div key={prob._id} className="lb-col-center" title={prob.title}>
+                    Q{i + 1}
                   </div>
-                  <div className="lb-score">{p.score} pts</div>
-                  <div className="lb-meta">
-                    {p.reveals > 0 && <span className="lb-tag lb-reveal">{p.reveals} reveals</span>}
-                    {p.wrongSubmissions > 0 && <span className="lb-tag lb-wrong">{p.wrongSubmissions} wrong</span>}
-                    {p.reveals === 0 && p.wrongSubmissions === 0 && <span className="lb-tag lb-clean">clean</span>}
+                ))}
+              </div>
+
+              <div className="leaderboard">
+                {leaderboard.length === 0 && <div style={{ opacity: 0.5, padding: 24, textAlign: 'center' }}>No participants yet</div>}
+
+                {leaderboard.map((p, i) => (
+                  <div
+                    key={p._id}
+                    className={`lb-row ${i === 0 ? 'lb-first' : i === 1 ? 'lb-second' : i === 2 ? 'lb-third' : ''}`}
+                    style={{ gridTemplateColumns: `60px minmax(180px, 1fr) 120px 100px repeat(${contestProblems.length}, 80px)` }}
+                  >
+                    <div className="lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</div>
+                    <div className="lb-name" title={p.name}>{p.name}</div>
+
+                    <div className="lb-score-wrap">
+                      <span className="lb-score-obtained">{p.score}</span>
+                      <span className="lb-score-total">/ {maxPossibleScore}</span>
+                    </div>
+
+                    <div className="lb-col-center">
+                      <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status].split(' ')[0]}</span>
+                    </div>
+
+                    {/* NAYA: Spheres Logic with Strict String Matching */}
+                    {contestProblems.map(prob => {
+                      const isSolved = p.solvedProblemIds?.some(id => id.toString() === prob._id.toString()) || false;
+                      const isCurrent = p.currentProblemId?._id?.toString() === prob._id.toString() ||
+                        p.currentProblemId?.title === prob.title ||
+                        p.currentProblemId?.toString() === prob._id.toString();
+
+                      return (
+                        <div key={prob._id} className="lb-col-center">
+                          <div className={`prob-sphere ${isSolved ? 'solved' : isCurrent ? 'current' : 'unsolved'}`} />
+                        </div>
+                      )
+                    })}
                   </div>
-                  <span className={`status-tag ${statusColors[p.status]}`}>{statusLabels[p.status]}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}

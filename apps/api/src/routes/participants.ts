@@ -56,13 +56,19 @@ router.get('/leaderboard', async (req: express.Request<ContestParams>, res) => {
         currentProblemId: p.currentProblemId,
         solvedProblemIds: p.solvedProblemIds || [] // Ensures the UI spheres work
       }))
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score // Sort by score descending
+      .sort((a: any, b: any) => {
+        // 1. Score-based ranking (Highest first)
+        if (b.score !== a.score) return b.score - a.score;
 
-        // Tie-breaker: earlier lastActive is better (meaning they finished first)
-        const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-        const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-        return timeA - timeB;
+        // 2. Time-based ranking (Lowest/Earliest first)
+        const timeA = a.lastSubmitTime ? new Date(a.lastSubmitTime).getTime() : Number.MAX_SAFE_INTEGER;
+        const timeB = b.lastSubmitTime ? new Date(b.lastSubmitTime).getTime() : Number.MAX_SAFE_INTEGER;
+        if (timeA !== timeB) return timeA - timeB;
+
+        // 3. Absolute fallback (Alphabetical order so ranks NEVER clash)
+        const nameA = a.name ? a.name.toLowerCase() : "";
+        const nameB = b.name ? b.name.toLowerCase() : "";
+        return nameA.localeCompare(nameB);
       })
 
     res.status(200).json(safeLeaderboard)
@@ -279,7 +285,6 @@ router.post('/participants/:participantId/heartbeat', async (req: express.Reques
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 // POST /participants/:participantId/submit
 router.post('/participants/:participantId/submit', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
   try {
@@ -287,83 +292,97 @@ router.post('/participants/:participantId/submit', async (req: express.Request<{
     const { passed, timeTaken, peeks, difficulty, problemId } = req.body;
 
     const contest = await Contest.findOne({ contestCode: contestId });
-    if (!contest) {
-      res.status(404).json({ message: 'Contest not found' });
-      return;
-    }
+    if (!contest) return res.status(404).json({ message: 'Contest not found' });
 
     const participant = contest.participants.id(participantId);
-    if (!participant) {
-      res.status(404).json({ message: 'Participant not found' });
-      return;
+    if (!participant) return res.status(404).json({ message: 'Participant not found' });
+
+    const targetProblemId = problemId || participant.currentProblemId;
+
+    // 1. Problem Stats Set Karo
+    let pStat = participant.problemStats?.find((ps: any) => ps.problemId.toString() === targetProblemId.toString());
+    if (!pStat) {
+      participant.problemStats.push({ problemId: targetProblemId, reveals: 0, wrongSubmissions: 0 });
+      pStat = participant.problemStats[participant.problemStats.length - 1];
     }
 
+    // Update reveals (safeguard)
+    if (peeks > pStat.reveals) {
+      pStat.reveals = peeks;
+    }
+
+    // 2. Mark Solved / Wrong
     if (!passed) {
       participant.wrongSubmissions += 1;
-      await contest.save();
-
-      try {
-        getIo().to(`admin_${contest.contestCode}`).emit('participant_update');
-        getIo().to(`contest_${contest.contestCode}`).emit('participant_update');
-      } catch (e) { }
-
-      res.json({ success: true, passed: false });
-      return;
-    }
-
-    // Fetch the actual problem to get explicit points and timeLimit
-    const targetProblemId = problemId || participant.currentProblemId;
-    let baseScore = 100;
-    let timeLimit = 300;
-
-    if (targetProblemId) {
-      const actualProblem = await Problem.findById(targetProblemId);
-      if (actualProblem) {
-        baseScore = actualProblem.points || 100;
-        timeLimit = actualProblem.timeLimit || 300;
-      }
+      pStat.wrongSubmissions += 1;
     } else {
-      const diffLower = String(difficulty).toLowerCase();
-      baseScore = diffLower === "easy" ? 100 : diffLower === "medium" ? 200 : 300;
+      if (targetProblemId) {
+        if (!participant.solvedProblemIds) participant.solvedProblemIds = [];
+        const problemIdStr = targetProblemId.toString();
+        const alreadySolved = participant.solvedProblemIds.some((id: any) => id.toString() === problemIdStr);
+
+        if (!alreadySolved) {
+          participant.solvedProblemIds.push(targetProblemId);
+        }
+      }
     }
 
-    // Remove time bonus to ensure points exactly match the question configuration
-    // const timeBonus = Math.max(0, Math.floor((timeLimit - timeTaken) * 0.5));
-    const peekPenalty = peeks * 20;
-    // Don't let penalties reduce score below 0 for a correct submission
-    const levelScore = Math.max(0, baseScore - peekPenalty);
+    // ✨ THE BULLETPROOF FIX: Har submit par poora score zero se calculate karo
+    let calculatedScore = 0;
 
-    participant.score += levelScore;
-    participant.status = 'submitted';
+    // A. Add points for all solved problems
+    for (const solvedId of participant.solvedProblemIds) {
+      const prob = await Problem.findById(solvedId);
+      if (prob) {
+        const diff = String(prob.difficulty).toLowerCase();
+        calculatedScore += prob.points || (diff === 'easy' ? 100 : diff === 'medium' ? 200 : 300);
+      }
+    }
+
+    // B. Subtract ALL penalties (from every question they touched)
+    for (const stat of participant.problemStats) {
+      calculatedScore -= (stat.wrongSubmissions * 15);
+      calculatedScore -= (stat.reveals * 5);
+    }
+
+    // C. Save the exact calculated score to the Database
+    participant.score = calculatedScore;
+    participant.status = passed ? 'submitted' : 'coding';
     participant.lastActive = new Date();
-
-    // NAYA LOGIC: Add problem to solvedProblemIds array if not already present
-    if (targetProblemId) {
-      if (!participant.solvedProblemIds) {
-        participant.solvedProblemIds = [];
-      }
-      // Check if it's already in the array to avoid duplicates
-      const problemIdStr = targetProblemId.toString();
-      const alreadySolved = participant.solvedProblemIds.some((id: any) => id.toString() === problemIdStr);
-
-      if (!alreadySolved) {
-        participant.solvedProblemIds.push(targetProblemId);
-      }
-    }
+    if (passed) participant.lastSubmitTime = new Date();
 
     contest.markModified('participants');
     await contest.save();
 
+    // Trigger Admin and Contest UI updates
     try {
       getIo().to(`admin_${contest.contestCode}`).emit('participant_update');
       getIo().to(`contest_${contest.contestCode}`).emit('participant_update');
     } catch (e) { }
 
-    res.json({ success: true, passed: true, scoreEarned: levelScore });
+    // If Wrong Submission
+    if (!passed) {
+      return res.json({ success: true, passed: false });
+    }
+
+    // ✨ SMART TRICK FOR FRONTEND:
+    // Hum Frontend ko sirf us problem ka base score wapas bhejenge. 
+    // Kyunki tumhara Frontend UI (-15 aur -5) already local state mein minus kar chuka hai, 
+    // jab woh local state mein is base score ko add karega, toh Frontend aur Backend ka data 
+    // magic ki tarah EXACTLY same match ho jayega!
+    let baseScore = 100;
+    if (targetProblemId) {
+      const actualProblem = await Problem.findById(targetProblemId);
+      if (actualProblem) baseScore = actualProblem.points || 100;
+    } else {
+      const diffLower = String(difficulty).toLowerCase();
+      baseScore = diffLower === "easy" ? 100 : diffLower === "medium" ? 200 : 300;
+    }
+
+    res.json({ success: true, passed: true, scoreEarned: baseScore });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 export default router

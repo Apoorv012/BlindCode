@@ -218,5 +218,39 @@ router.delete('/:contestId/problems/:problemId', protect, async (req: AuthReques
     res.status(500).json({ message: 'Server error' })
   }
 })
+// POST /contests/:contestId/end
+router.post('/:contestId/end', protect, async (req: AuthRequest & express.Request, res) => {
+  try {
+    const { contestId } = req.params;
 
+    // Status update karo DB me
+    const contest = await Contest.findOneAndUpdate(
+      { contestCode: contestId, adminId: req.adminId },
+      {
+        status: ContestStatusEnum.ended,
+        endedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!contest) {
+      return res.status(404).json({ message: 'Contest not found or unauthorized' });
+    }
+
+    // ✨ SABHI PARTICIPANTS KO BATA DO KI CONTEST KHATAM HO GAYA (Socket Event)
+    // Jahan tune End Contest route banaya hai:
+    try {
+      // Yeh payload { status: 'ended' } seedha frontend ko bata dega
+      getIo().to(`contest_${contest.contestCode}`).emit('contest_update', { status: 'ended' });
+      getIo().to(`admin_${contest.contestCode}`).emit('contest_update', { status: 'ended' });
+    } catch (socketErr) {
+      console.error("Socket emit failed:", socketErr);
+    }
+
+    res.json({ success: true, message: 'Contest ended successfully', contest });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 export default router

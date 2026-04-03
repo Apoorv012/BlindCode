@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
@@ -32,11 +31,10 @@ export default function App() {
     // SECURITY & ANTI-CHEAT (Global)
     useEffect(() => {
         const handleBlur = () => {
-             // Only detect cheating if we are actually in a contest and it hasn't ended
-             // We can check if contestInfo is set and status is not ended
-             if (contestInfo && contestInfo.status !== ContestStatus.ENDED) {
+            // Only detect cheating if we are actually in a contest and it hasn't ended
+            if (contestInfo && contestInfo.status !== ContestStatus.ENDED) {
                 setCheatingDetected(true);
-             }
+            }
         };
 
         const handleContextMenu = (e: MouseEvent) => {
@@ -100,17 +98,17 @@ export default function App() {
                 {/* Cheating Overlay even on dashboard if enabled */}
                 {cheatingDetected && (
                     <div className="fixed inset-0 bg-red-950/95 backdrop-blur-2xl flex items-center justify-center z-[500] p-8">
-                         <div className="bg-black border-4 border-red-600 rounded-3xl p-16 text-center max-w-2xl">
+                        <div className="bg-black border-4 border-red-600 rounded-3xl p-16 text-center max-w-2xl">
                             <h2 className="text-4xl font-black text-white mb-6">DEVICE LOCKED</h2>
                             <p className="text-red-500 mb-8 font-bold">FOCUS LOST. PLEASE CONTACT ADMIN.</p>
-                            <input 
-                                type="password" 
+                            <input
+                                type="password"
                                 placeholder="ADMIN UNLOCK CODE"
                                 value={unlockCode}
                                 onChange={(e) => setUnlockCode(e.target.value)}
                                 className="w-full bg-[#111] border border-red-600 rounded-xl px-6 py-4 text-white text-center mb-4"
                             />
-                            <button 
+                            <button
                                 onClick={() => {
                                     if (unlockCode === "IEEE-ADMIN") {
                                         setCheatingDetected(false);
@@ -181,12 +179,11 @@ function ContestApp({
     const [code, setCode] = useState("");
     const [isBlurred, setIsBlurred] = useState(true);
     const [logs, setLogs] = useState<string[]>([]);
-    
-    // Automatically resume at the first unsolved problem, capped by total problems
+
     const maxProblems = contestInfo.problemIds?.length || 1;
     const computedLevel = Math.min(initialSolved.length + 1, maxProblems);
     const [currentLevel, setCurrentLevel] = useState(computedLevel);
-    
+
     const [timer, setTimer] = useState(0);
     const [visionTimeLeft, setVisionTimeLeft] = useState(0);
     const [peekCount, setPeekCount] = useState(0);
@@ -201,7 +198,6 @@ function ContestApp({
     const [contestPaused, setContestPaused] = useState(contestInfo.status === 'paused');
     const [socket, setSocket] = useState<Socket | null>(null);
 
-    // Heartbeat logic
     const statusTracker = useRef({
         status: 'idle',
         compiles: 0,
@@ -209,7 +205,6 @@ function ContestApp({
         reveals: 0
     });
 
-    // Resizer States
     const [editorHeight, setEditorHeight] = useState(65);
     const [isDraggingEditor, setIsDraggingEditor] = useState(false);
 
@@ -222,23 +217,19 @@ function ContestApp({
     const [levelStartTime, setLevelStartTime] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Problems fetched from API
     const [problems, setProblems] = useState<Challenge[]>([]);
     const [problemsLoading, setProblemsLoading] = useState(true);
     const [problemsError, setProblemsError] = useState("");
 
-    // Sidebar States (UPDATED with Leaderboard)
     const [activeSidebarTab, setActiveSidebarTab] = useState<"description" | "submissions" | "leaderboard">("description");
     const [submissionData, setSubmissionData] = useState<SubmissionData>({ status: "idle", message: "" });
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardParticipant[]>([]);
     const [contestEnded, setContestEnded] = useState(contestInfo.status === ContestStatus.ENDED);
 
-    // Fetch Leaderboard when event arrives
     const fetchLb = useCallback(() => {
         if (!contestInfo?.contestCode) return;
         apiGetLeaderboard(contestInfo.contestCode)
             .then(data => {
-                // Ensure the data matches LeaderboardParticipant type
                 const mappedData: LeaderboardParticipant[] = data.map((p: any) => ({
                     ...p,
                     _id: p._id || "",
@@ -252,8 +243,20 @@ function ContestApp({
     }, [contestInfo?.contestCode]);
 
     useEffect(() => {
-        fetchLb(); // Initial fetch
+        fetchLb();
     }, [fetchLb]);
+
+    const addLog = useCallback((message: string) => {
+        const timestamp = new Date().toLocaleTimeString();
+        setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
+    }, []);
+
+    // ✨ NEW: Handles the 10-second reveal penalty (5 points)
+    const handleRevealFull = () => {
+        setScore((prev) => prev - 5);
+        statusTracker.current.reveals += 1;
+        addLog(`🔓 Reveal Activated for 10s! -5 POINTS PENALTY.`);
+    };
 
     const handlePartialVision = (cost: number, text: string) => {
         setTimer(prev => prev + cost);
@@ -264,12 +267,6 @@ function ContestApp({
 
     const currentChallenge = problems[currentLevel - 1];
 
-    const addLog = useCallback((message: string) => {
-        const timestamp = new Date().toLocaleTimeString();
-        setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
-    }, []);
-
-    // Fetch all problems for this contest on mount
     useEffect(() => {
         if (contestInfo.problemIds.length === 0) {
             setProblemsLoading(false);
@@ -287,7 +284,6 @@ function ContestApp({
             });
     }, []);
 
-    // Set starter code and log welcome once problems are loaded
     useEffect(() => {
         if (problemsLoading || !currentChallenge) return;
         setCode(currentChallenge.starterCode[language] ?? "");
@@ -299,7 +295,7 @@ function ContestApp({
     }, [problemsLoading]);
 
     useEffect(() => {
-        if (contestPaused) return; // Don't tick while paused
+        if (contestPaused) return;
         const interval = setInterval(() => {
             setTimer((prev) => prev + 1);
             const remaining = Math.max(0, Math.floor((liveEndTime - Date.now()) / 1000));
@@ -326,18 +322,32 @@ function ContestApp({
             fetchLb();
         });
 
-        // When admin pauses/resumes, fetch latest contest state and update timers
-        newSocket.on("contest_update", () => {
+        // ✨ FIX: Super bulletproof contest_update listener
+        newSocket.on("contest_update", (payload) => {
+            // 1. DIRECT SOCKET OVERRIDE (Fetch ka jhanjhat khatam)
+            if (payload && payload.status === 'ended') {
+                setContestEnded(true);
+                setContestTimeLeft(0);
+                addLog(" Contest has been officially ended by Admin.");
+                fetchLb();
+                return; // Fetch call mat karo, yahin se block kar do
+            }
+
+            // 2. Fallback Fetch (Agar payload mein status nahi aaya)
             fetch(`${API_URL}/contests/code/${contestInfo.contestCode}`)
                 .then(r => r.json())
                 .then(data => {
-                    addLog(`Contest updated: ${data.status}`);
+                    const fetchedStatus = data.status || (data.contest && data.contest.status);
+
                     if (data.intendedEndTime) {
                         setLiveEndTime(new Date(data.intendedEndTime).getTime());
                     }
-                    setContestPaused(data.status === ContestStatus.PAUSED);
-                    if (data.status === ContestStatus.ENDED) {
+                    setContestPaused(fetchedStatus === 'paused' || fetchedStatus === ContestStatus.PAUSED);
+
+                    if (String(fetchedStatus).toLowerCase() === 'ended' || fetchedStatus === ContestStatus.ENDED) {
                         setContestEnded(true);
+                        setContestTimeLeft(0);
+                        fetchLb();
                     }
                 })
                 .catch(console.error);
@@ -348,19 +358,20 @@ function ContestApp({
         };
     }, [contestInfo.contestCode, participantId, fetchLb]);
 
-    // We keep these in refs so the heartbeat interval doesn't reset on every minor state change
     const latestBeatPayload = useRef({
         contestCode: contestInfo.contestCode,
         participantId: participantId,
         problemId: currentChallenge?._id,
+        score: score,
     });
     useEffect(() => {
         latestBeatPayload.current = {
             contestCode: contestInfo.contestCode,
             participantId: participantId,
             problemId: currentChallenge?._id,
+            score: score,
         };
-    }, [contestInfo.contestCode, participantId, currentChallenge?._id]);
+    }, [contestInfo.contestCode, participantId, currentChallenge?._id, score]);
 
     useEffect(() => {
         let timeoutId: ReturnType<typeof setTimeout>;
@@ -375,16 +386,14 @@ function ContestApp({
                     compiles: statusTracker.current.compiles,
                     wrongSubmissions: statusTracker.current.wrongSubmissions,
                     reveals: statusTracker.current.reveals,
-                    currentProblemId: currentObj.problemId
+                    currentProblemId: currentObj.problemId,
+                    score: currentObj.score
                 });
             }
-            // 10s + random 0 to 2 seconds
             timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
         };
 
-        // First beat stagger
         timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
-
         return () => clearTimeout(timeoutId);
     }, [socket]);
 
@@ -404,7 +413,6 @@ function ContestApp({
         }
     }, [visionTimeLeft]);
 
-    // Handle Editor Vertical Resizing
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingEditor || !containerRef.current) return;
@@ -432,11 +440,9 @@ function ContestApp({
         };
     }, [isDraggingEditor]);
 
-    // Handle Sidebar Horizontal Resizing
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (!isDraggingSidebar) return;
-            // Constrain the sidebar width between 300px and 800px
             const newWidth = Math.max(300, Math.min(e.clientX, 800));
             setSidebarWidth(newWidth);
         };
@@ -503,7 +509,6 @@ function ContestApp({
         return Math.max(0, baseScore + timeBonus - peekPenalty);
     };
 
-    // Run only visible test cases
     const handleRun = async () => {
         if (isCompiling || !currentChallenge) return;
         setIsCompiling(true);
@@ -551,7 +556,6 @@ function ContestApp({
         setSubmissionData({ status: "idle", message: "Evaluating your code..." });
         addLog("🚀 Submitting code for evaluation...");
 
-        // Submit runs ALL test cases (visible + hidden)
         const allTestCases = currentChallenge?.testCases || [];
         let allPassed = true;
         let passedCount = 0;
@@ -608,12 +612,11 @@ function ContestApp({
                 }
             }
 
-            // Submit to backend to update real score and status
             let backendScore = 0;
             try {
                 const submitRes = await apiSubmitScore(contestInfo.contestCode, participantId, {
                     passed: allPassed,
-                    timeTaken: Math.floor((Date.now() - levelStartTime) / 1000), // Note: does not include penalties correctly, but we'll abide by current compute
+                    timeTaken: Math.floor((Date.now() - levelStartTime) / 1000),
                     peeks: peekCount,
                     difficulty: currentChallenge.difficulty,
                     problemId: currentChallenge._id
@@ -631,7 +634,6 @@ function ContestApp({
 
                 setScore((prev) => prev + levelScore);
 
-                // Extended submission data
                 setSubmissionData({
                     status: "accepted",
                     message: "All test cases passed! Outstanding work.",
@@ -654,7 +656,6 @@ function ContestApp({
                 }, 1500);
             } else {
                 statusTracker.current.wrongSubmissions += 1;
-                // Determine if it was just hidden tests that failed or visible tests
                 const failedVisible = testResults.some(r => r.status === 'error' || (r.status === 'failed' && !r.hidden));
 
                 if (failedVisible) {
@@ -669,12 +670,15 @@ function ContestApp({
                     setSubmissionData({
                         status: "rejected",
                         message: `Sample cases passed, but hidden cases failed. Passed ${passedCount}/${allTestCases.length}.`,
-                        testResults: [], // hide details for hidden cases!
+                        testResults: [],
                         passedCount,
                         totalCount: allTestCases.length
                     } as any);
                 }
-                addLog(`❌ SUBMISSION REJECTED: Failed some test cases.`);
+
+                // ✨ NEW: Handles the 15 point penalty on wrong submission
+                setScore((prev) => prev - 15);
+                addLog(`❌ SUBMISSION REJECTED: Failed some test cases. -15 POINTS PENALTY.`);
             }
         } catch (error) {
             setSubmissionData({ status: "error", message: "Failed to connect to compiler service." } as any);
@@ -687,7 +691,7 @@ function ContestApp({
     const handleNextLevel = () => {
         setShowLevelComplete(false);
         setCurrentLevel((prev) => prev + 1);
-        const nextChallenge = problems[currentLevel]; // currentLevel not yet incremented
+        const nextChallenge = problems[currentLevel];
         setCode(nextChallenge?.starterCode[language] ?? "");
         setPeekCount(0);
         setIsBlurred(true);
@@ -717,8 +721,6 @@ function ContestApp({
 
     return (
         <div className="h-screen flex flex-row bg-[#1a1a1a] overflow-hidden">
-
-            {/* Problems loading overlay */}
             {problemsLoading && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[100]">
                     <div className="flex flex-col items-center gap-4">
@@ -738,7 +740,7 @@ function ContestApp({
             )}
 
             {showLevelComplete && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-8">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-100 p-8">
                     <div className="bg-[#252526] border border-[#3c3c3c] rounded-3xl p-14 text-center max-w-lg shadow-2xl">
                         <div className="text-8xl mb-8">🎉</div>
                         <h2 className="text-4xl font-bold text-white mb-4">Level Complete!</h2>
@@ -755,14 +757,14 @@ function ContestApp({
             )}
 
             {showGameComplete && !contestEnded && (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-50 p-8">
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-100 p-8">
                     <div className="bg-[#252526] border border-green-500/30 rounded-3xl p-14 text-center max-w-xl shadow-[0_0_50px_rgba(16,185,129,0.2)] relative overflow-hidden">
                         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
                         <div className="relative z-10">
                             <div className="text-8xl mb-8 animate-bounce">🎖️</div>
                             <h2 className="text-5xl font-black text-white mb-4 tracking-tighter" style={{ fontFamily: 'var(--font-orbitron)' }}>WELL DONE!</h2>
                             <p className="text-[#858585] mb-6 text-xl font-mono">You've completed all parameters. Mission objective reached.</p>
-                            
+
                             <div className="bg-green-500/10 p-8 rounded-2xl border border-green-500/20 mb-10">
                                 <h3 className="text-green-400 text-2xl font-bold mb-2">Congratulations!</h3>
                                 <p className="text-[#cccccc] text-lg">You have successfully completed all questions.</p>
@@ -779,8 +781,11 @@ function ContestApp({
                                 </div>
                                 <div className="w-px h-12 bg-[#3c3c3c]"></div>
                                 <div>
-                                    <p className="text-white text-3xl font-bold mb-1 tracking-widest">{formatTime(timer)}</p>
-                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Total Time</p>
+                                    {/* ✨ FIX: Changed 'timer' to 'contestTimeLeft' */}
+                                    <p className="text-white text-3xl font-bold mb-1 tracking-widest">
+                                        {formatTime(contestTimeLeft)}
+                                    </p>
+                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Time Left</p>
                                 </div>
                             </div>
                         </div>
@@ -788,33 +793,31 @@ function ContestApp({
                 </div>
             )}
 
-            {/* CHEATING DETECTED OVERLAY */}
             {cheatingDetected && !contestEnded && (
                 <div className="fixed inset-0 bg-red-950/95 backdrop-blur-2xl flex items-center justify-center z-[500] p-8">
                     <div className="bg-black border-4 border-red-600 rounded-3xl p-16 text-center max-w-2xl shadow-[0_0_100px_rgba(220,38,38,0.5)]">
                         <AlertTriangle size={120} className="text-red-600 mx-auto mb-10 animate-pulse" />
                         <h2 className="text-6xl font-black text-white mb-6 tracking-tighter" style={{ fontFamily: 'var(--font-orbitron)' }}>DEVICE LOCKED</h2>
                         <p className="text-red-500 text-2xl font-bold mb-10 uppercase tracking-widest">Cheating Attempt Detected</p>
-                        
+
                         <div className="bg-red-900/10 border border-red-900/30 p-8 rounded-2xl mb-12">
                             <p className="text-[#858585] text-xl mb-4">Application lost focus. All operations suspended.</p>
                             <p className="text-white font-bold text-lg underline">PLEASE CONTACT A CONTEST ADMINISTRATOR TO UNLOCK THIS DEVICE.</p>
                         </div>
 
                         <div className="flex flex-col items-center gap-4">
-                            <input 
-                                type="password" 
+                            <input
+                                type="password"
                                 placeholder="ADMIN UNLOCK CODE"
                                 value={unlockCode}
                                 onChange={(e) => setUnlockCode(e.target.value)}
                                 className="w-full bg-[#111] border border-red-600/50 rounded-xl px-6 py-4 text-white text-center font-mono text-xl focus:outline-none focus:border-red-600 transition-all placeholder:text-red-900/50"
                             />
-                            <button 
+                            <button
                                 onClick={() => {
                                     if (unlockCode === "IEEE-ADMIN") {
                                         setCheatingDetected(false);
                                         setUnlockCode("");
-                                        // Ensure fullscreen again
                                         appWindow.setFocus();
                                         appWindow.setFullscreen(true);
                                     } else if (unlockCode) {
@@ -831,11 +834,9 @@ function ContestApp({
                 </div>
             )}
 
-            {/* CONTEST ENDED VIEW - SHOW ONLY LEADERBOARD */}
             {contestEnded && (
                 <div className="fixed inset-0 bg-[#0f0f0f] z-[150] flex flex-col items-center justify-center p-8 overflow-hidden">
                     <div className="w-full max-w-4xl h-full flex flex-col">
-                        {/* ... existing end screen content ... */}
                         <div className="flex items-center justify-between mb-10 shrink-0">
                             <div className="flex items-center gap-4">
                                 <Award className="text-yellow-400" size={48} />
@@ -846,7 +847,7 @@ function ContestApp({
                                     <p className="text-[#858585] font-mono mt-1 uppercase tracking-[0.2em] text-xs">Final results finalized</p>
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={handleLogout}
                                 className="px-8 py-3 bg-[#1e1e1e] border border-[#3c3c3c] text-[#858585] rounded-xl hover:text-white transition-all font-bold tracking-widest uppercase text-xs"
                                 style={{ fontFamily: 'var(--font-orbitron)' }}
@@ -856,27 +857,27 @@ function ContestApp({
                         </div>
 
                         <div className="flex-1 bg-[#1a1a1a] border border-[#333] rounded-3xl p-8 shadow-2xl relative overflow-hidden flex flex-col">
-                           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
-                           <div className="flex-1 min-h-0">
-                                <Leaderboard 
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+                            <div className="flex-1 min-h-0">
+                                <Leaderboard
                                     leaderboard={leaderboardData}
                                     currentParticipantId={participantId}
                                     problems={contestInfo.problemIds}
                                 />
-                           </div>
+                            </div>
                         </div>
 
                         <div className="mt-8 flex justify-between items-center px-4 shrink-0">
                             <div className="flex items-center gap-6">
-                               <div className="flex flex-col">
-                                   <span className="text-[10px] text-[#555] uppercase tracking-widest font-bold">Contest Name</span>
-                                   <span className="text-white text-lg font-bold">{contestInfo.name}</span>
-                               </div>
-                               <div className="h-8 w-px bg-[#333]"></div>
-                               <div className="flex flex-col">
-                                   <span className="text-[10px] text-[#555] uppercase tracking-widest font-bold">Your Official Team</span>
-                                   <span className="text-cyan-400 text-lg font-bold">{teamName}</span>
-                               </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-[#555] uppercase tracking-widest font-bold">Contest Name</span>
+                                    <span className="text-white text-lg font-bold">{contestInfo.name}</span>
+                                </div>
+                                <div className="h-8 w-px bg-[#333]"></div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-[#555] uppercase tracking-widest font-bold">Your Official Team</span>
+                                    <span className="text-cyan-400 text-lg font-bold">{teamName}</span>
+                                </div>
                             </div>
                             <div className="text-right">
                                 <span className="text-[10px] text-[#555] uppercase tracking-widest font-bold block mb-1">Final Standing</span>
@@ -889,7 +890,6 @@ function ContestApp({
                 </div>
             )}
 
-            {/* Left Column: Problem Sidebar (Now wrapped for dynamic width) */}
             <div style={{ width: sidebarWidth }} className="shrink-0 flex flex-col relative h-full">
                 {currentChallenge && (
                     <ProblemSidebar
@@ -905,7 +905,6 @@ function ContestApp({
                 )}
             </div>
 
-            {/* Horizontal Resizer for Sidebar */}
             <div
                 className="w-2 bg-[#252526] hover:bg-[#007acc] cursor-col-resize flex flex-col items-center justify-center shrink-0 transition-colors group z-50 border-r border-[#3c3c3c]"
                 onMouseDown={() => setIsDraggingSidebar(true)}
@@ -913,9 +912,7 @@ function ContestApp({
                 <div className="h-20 w-1 bg-[#555] rounded group-hover:bg-white/50 transition-colors" />
             </div>
 
-            {/* Right Column: Editor and Terminal */}
             <div className="flex-1 flex flex-col min-w-0 h-full">
-                {/* Top Info Bar */}
                 <div className="flex items-center justify-between px-8 py-4 bg-[#252526] border-b border-[#3c3c3c] shrink-0">
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-3">
@@ -965,6 +962,8 @@ function ContestApp({
                             onRun={handleRun}
                             onSubmit={handleSubmit}
                             onVision={handleVision}
+                            // ✨ NEW: Passed down the new reveal full function
+                            onRevealFull={handleRevealFull}
                             level={currentLevel}
                             visionTimeLeft={visionTimeLeft}
                             teamName={teamName}

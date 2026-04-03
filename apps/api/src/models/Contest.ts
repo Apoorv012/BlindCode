@@ -24,6 +24,12 @@ const participantSchema = new mongoose.Schema({
   compiles: { type: Number, default: 0 },
   wrongSubmissions: { type: Number, default: 0 },
   score: { type: Number, default: 0 },
+  lastSubmitTime: { type: Date },
+  problemStats: [{
+    problemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Problem' },
+    reveals: { type: Number, default: 0 },
+    wrongSubmissions: { type: Number, default: 0 }
+  }],
   lastActive: { type: Date }
 })
 

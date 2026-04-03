@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Play, Eye, X, ChevronDown, Code2, Send } from "lucide-react";
+import { Play, Eye, X, ChevronDown, Code2, Send, Unlock } from "lucide-react"; // Added Unlock icon
 import CodeWorkspace from "./CodeWorkspace";
 
 interface EditorProps {
@@ -7,7 +7,8 @@ interface EditorProps {
     onCodeChange: (code: string) => void;
     isBlurred: boolean;
     onRun: () => void;
-    onSubmit: () => void; // <--- ADD THIS LINE
+    onSubmit: () => void;
+    onRevealFull: () => void; // <--- ADD THIS LINE (Handle 5 point deduction in parent)
     onVision: () => void;
     onPartialVision: (cost: number, text: string) => void;
     level: number;
@@ -17,6 +18,7 @@ interface EditorProps {
     onLanguageChange: (lang: string) => void;
     isCompiling: boolean;
 }
+
 const LANGUAGES = [
     { id: "cpp", name: "C++", icon: "⚡", extension: ".cpp" },
     { id: "python", name: "Python", icon: "🐍", extension: ".py" },
@@ -29,6 +31,7 @@ export default function Editor({
     isBlurred,
     onRun,
     onSubmit,
+    onRevealFull, // Destructure here
     onPartialVision,
     level,
     visionTimeLeft,
@@ -42,10 +45,32 @@ export default function Editor({
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selectedText: string } | null>(null);
     const [revealedPopup, setRevealedPopup] = useState<{ x: number; y: number; text: string } | null>(null);
 
+    // NEW: State for 10-second reveal timer
+    const [revealTimeLeft, setRevealTimeLeft] = useState(0);
+    const isTempRevealed = revealTimeLeft > 0;
+
     useEffect(() => {
         const lines = code.split("\n").length;
         setLineCount(Math.max(lines, 25));
     }, [code]);
+
+    // NEW: Timer effect for the 10-second reveal
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (revealTimeLeft > 0) {
+            timer = setInterval(() => {
+                setRevealTimeLeft((prev) => prev - 1);
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [revealTimeLeft]);
+
+    const handleRevealClick = () => {
+        if (revealTimeLeft === 0) {
+            onRevealFull(); // Trigger parent to deduct 5 points
+            setRevealTimeLeft(10); // Start 10 second countdown
+        }
+    };
 
     const handlePaste = (e: React.ClipboardEvent) => {
         e.preventDefault();
@@ -58,7 +83,7 @@ export default function Editor({
     const handleContextMenu = (e: React.MouseEvent, externalSelectedText?: string) => {
         e.preventDefault();
         const selectedText = externalSelectedText || window.getSelection()?.toString() || "";
-        if (selectedText && isBlurred) {
+        if (selectedText && isBlurred && !isTempRevealed) {
             setContextMenu({ x: e.clientX, y: e.clientY, selectedText });
         }
     };
@@ -135,29 +160,18 @@ export default function Editor({
                         </div>
                     )}
 
-                    {/* <button
-                        onClick={onVision}
-                        disabled={visionTimeLeft > 0}
-                        className={`flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 text-base font-semibold ${visionTimeLeft > 0
-                            ? "bg-[#3c3c3c] text-[#858585] cursor-not-allowed"
-                            : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white hover:scale-105"
+                    {/* NEW REVEAL BUTTON */}
+                    <button
+                        onClick={handleRevealClick}
+                        disabled={isTempRevealed}
+                        className={`flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 text-base font-semibold shadow-lg ${isTempRevealed
+                                ? "bg-[#3c3c3c] text-yellow-400 cursor-not-allowed"
+                                : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white hover:scale-105 shadow-red-500/25"
                             }`}
                     >
-                        {isBlurred ? <Eye size={20} /> : <EyeOff size={20} />}
-                        <span>Vision</span>
-                    </button> */}
-
-                    {/* <button
-                        onClick={onRun}
-                        disabled={isCompiling}
-                        className={`flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 text-base font-semibold ${isCompiling
-                            ? "bg-[#3c3c3c] text-[#858585] cursor-not-allowed"
-                            : "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white hover:scale-105"
-                            }`}
-                    >
-                        <Play size={20} fill="currentColor" />
-                        <span>{isCompiling ? "Compiling..." : "Run Code"}</span>
-                    </button> */}
+                        {isTempRevealed ? <Unlock size={20} /> : <Eye size={20} />}
+                        <span>{isTempRevealed ? `Revealed (${revealTimeLeft}s)` : "Reveal (-5 Pts)"}</span>
+                    </button>
 
                     <button
                         onClick={onRun}
@@ -171,7 +185,6 @@ export default function Editor({
                         <span>{isCompiling ? "Running..." : "Run Code"}</span>
                     </button>
 
-                    {/* NEW SUBMIT BUTTON */}
                     <button
                         onClick={onSubmit}
                         disabled={isCompiling}
@@ -204,66 +217,18 @@ export default function Editor({
                     ))}
                 </div>
 
-                {/* The new CodeWorkspace handles the textarea and dynamic blur */}
                 <div className="flex-1 relative overflow-hidden flex">
                     <CodeWorkspace
                         code={code}
                         onCodeChange={onCodeChange}
-                        isBlurred={isBlurred}
+                        // PASS IN COMBINED BLUR STATE SO SABOTAGE CHARACTERS ARE REMOVED
+                        isBlurred={isBlurred && !isTempRevealed}
                         level={level}
                         currentLang={currentLang}
                         onPaste={handlePaste}
                         onCopy={handleCopy}
                         onContextMenu={handleContextMenu}
                     />
-
-                    {/* Atmospheric Overlays (Gradients and Droplets) */}
-                    {/* {isBlurred && (
-                        <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden">
-
-                            <div
-                                className="absolute inset-0"
-                                style={{
-                                    background: `
-                    linear-gradient(135deg, 
-                      rgba(30, 30, 30, 0.4) 0%, 
-                      rgba(40, 40, 50, 0.3) 25%,
-                      rgba(30, 30, 30, 0.35) 50%,
-                      rgba(45, 45, 55, 0.3) 75%,
-                      rgba(30, 30, 30, 0.4) 100%
-                    )
-                  `,
-                                }}
-                            />
-
-                            <div
-                                className="absolute inset-0"
-                                style={{
-                                    background: `
-                    radial-gradient(ellipse 80% 50% at 20% 30%, rgba(100, 150, 200, 0.05) 0%, transparent 50%),
-                    radial-gradient(ellipse 60% 40% at 80% 70%, rgba(100, 150, 200, 0.05) 0%, transparent 50%)
-                  `,
-                                }}
-                            />
-
-                            {droplets.map((drop) => (
-                                <div
-                                    key={drop.id}
-                                    className={`water-droplet water-droplet-${drop.size}`}
-                                    style={{
-                                        left: `${drop.x}%`,
-                                        top: `${drop.y}%`,
-                                        transform: `rotate(${drop.rotation}deg)`,
-                                    }}
-                                />
-                            ))}
-
-                            <div className="absolute bottom-8 right-8 text-white/30 text-base flex items-center gap-3">
-                                <Eye size={20} />
-                                <span>Use Vision to see clearly</span>
-                            </div>
-                        </div>
-                    )} */}
                 </div>
             </div>
 

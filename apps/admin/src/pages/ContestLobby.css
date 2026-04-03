@@ -188,6 +188,25 @@
   color: #e8e8f0;
 }
 
+
+/* Custom Scrollbar for the Participants List */
+.lobby-participants-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.lobby-participants-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lobby-participants-list::-webkit-scrollbar-thumb {
+  background: #2a2a35;
+  border-radius: 10px;
+}
+
+.lobby-participants-list::-webkit-scrollbar-thumb:hover {
+  background: #6c63ff55;
+}
+
 /* Participants panel */
 .lobby-participants-panel {
   background: #141418;

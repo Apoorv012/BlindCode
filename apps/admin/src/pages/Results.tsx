@@ -5,8 +5,8 @@ import { apiGetResults } from '../api'
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard'
 
-const WRONG_PENALTY = 50
-const REVEAL_PENALTY = 20
+const WRONG_PENALTY = 15
+const REVEAL_PENALTY = 5
 const SCORE_MAP: Record<Difficulty, number> = { Easy: 100, Medium: 200, Hard: 300 }
 
 interface ProblemResult {
@@ -135,8 +135,8 @@ export default function Results() {
           <span className="legend-item medium">Medium +200</span>
           <span className="legend-item hard">Hard +300</span>
           <span className="legend-sep">|</span>
-          <span className="legend-item penalty">Wrong −50</span>
-          <span className="legend-item penalty">Reveal −20</span>
+          <span className="legend-item penalty">Wrong −15</span>
+          <span className="legend-item penalty">Reveal −2</span>
         </div>
 
         {topThree.length >= 2 && (
