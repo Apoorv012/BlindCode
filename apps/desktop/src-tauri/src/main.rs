@@ -11,7 +11,6 @@ use tokio::io::AsyncWriteExt;
 
 // ✨ Import Windows-specific extension for hiding console windows
 #[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 #[derive(serde::Serialize)]
 pub struct ExecutionResult {

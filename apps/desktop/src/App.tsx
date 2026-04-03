@@ -231,6 +231,11 @@ function ContestApp({
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardParticipant[]>([]);
     const [contestEnded, setContestEnded] = useState(contestInfo.status === ContestStatus.ENDED);
 
+    const addLog = useCallback((message: string) => {
+        const timestamp = new Date().toLocaleTimeString();
+        setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
+    }, []);
+
     const fetchLb = useCallback(() => {
         if (!contestInfo?.contestCode) return;
         apiGetLeaderboard(contestInfo.contestCode)
@@ -244,17 +249,15 @@ function ContestApp({
                 }));
                 setLeaderboardData(mappedData);
             })
-            .catch(err => console.error("Failed to update leaderboard:", err));
-    }, [contestInfo?.contestCode]);
+            .catch(err => {
+                console.error("Failed to update leaderboard:", err);
+                addLog(`⚠️ Leaderboard Sync Error: ${err.message || String(err)}`);
+            });
+    }, [contestInfo?.contestCode, addLog]);
 
     useEffect(() => {
         fetchLb();
     }, [fetchLb]);
-
-    const addLog = useCallback((message: string) => {
-        const timestamp = new Date().toLocaleTimeString();
-        setLogs((prev) => [...prev, `[${timestamp}] ${message}`]);
-    }, []);
 
     // ✨ NEW: Handles the 10-second reveal penalty (5 points)
     const handleRevealFull = () => {
@@ -355,7 +358,10 @@ function ContestApp({
                         fetchLb();
                     }
                 })
-                .catch(console.error);
+                .catch(err => {
+                    console.error(err);
+                    addLog(`⚠️ Contest Sync Error: ${err.message || String(err)}`);
+                });
         });
 
         return () => {
@@ -542,8 +548,8 @@ function ContestApp({
                 }
             }
             addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        } catch (error) {
-            addLog("❌ Failed to connect to compiler service");
+        } catch (error: any) {
+            addLog(`❌ Connection Error: ${error.message || "Failed to connect to compiler service"}`);
             console.error(error);
         } finally {
             setIsCompiling(false);
@@ -662,9 +668,10 @@ function ContestApp({
 
                 addLog(`❌ SUBMISSION REJECTED. Score updated: ${finalScoreFromBackend}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             setSubmissionData({ status: "error", message: "Compiler error." } as any);
-            addLog("❌ Connection Error");
+            addLog(`❌ Critical Connection Error: ${error.message || "Unknown error"}`);
+            console.error(error);
         } finally {
             setIsCompiling(false);
         }
