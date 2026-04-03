@@ -1,4 +1,5 @@
-export const API_URL = 'http://localhost:4000'
+const ENV = import.meta.env.VITE_ENV;
+export const API_URL = ENV === 'LOCAL' ? import.meta.env.VITE_BACKEND_URL_LOCAL : import.meta.env.VITE_BACKEND_URL_CLOUD;
 
 export const authHeader = () => ({
   'Content-Type': 'application/json',
