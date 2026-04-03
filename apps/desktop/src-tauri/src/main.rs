@@ -9,6 +9,10 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 use tokio::io::AsyncWriteExt;
 
+// ✨ Import Windows-specific extension for hiding console windows
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 #[derive(serde::Serialize)]
 pub struct ExecutionResult {
     output: String,
@@ -16,6 +20,9 @@ pub struct ExecutionResult {
     #[serde(rename = "hasError")]
     has_error: bool,
 }
+
+// Windows constant to prevent console window flashing
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[tauri::command]
 async fn execute_code(code: String, language: String, input: String) -> ExecutionResult {
@@ -55,12 +62,15 @@ async fn run_cpp(dir: &PathBuf, code: &str, input: &str) -> ExecutionResult {
         return ExecutionResult { output: "".to_string(), error: Some("Failed to write main.cpp".into()), has_error: true };
     }
 
-    // Compile with timeout
+    // Compile with NO WINDOW flag
     let mut compile = Command::new("g++");
     compile
         .arg(source_path.to_str().unwrap())
         .arg("-o")
         .arg(exe_path.to_str().unwrap());
+    
+    #[cfg(target_os = "windows")]
+    compile.creation_flags(CREATE_NO_WINDOW);
 
     let compile_output = timeout(Duration::from_secs(5), compile.output()).await;
 
@@ -74,7 +84,11 @@ async fn run_cpp(dir: &PathBuf, code: &str, input: &str) -> ExecutionResult {
         _ => {}
     }
 
-    run_with_limits(Command::new(exe_path.to_str().unwrap()), 5, 256, input).await
+    let mut run_cmd = Command::new(exe_path.to_str().unwrap());
+    #[cfg(target_os = "windows")]
+    run_cmd.creation_flags(CREATE_NO_WINDOW);
+
+    run_with_limits(run_cmd, 5, 256, input).await
 }
 
 // --- Python Execution ---
@@ -86,6 +100,10 @@ async fn run_python(dir: &PathBuf, code: &str, input: &str) -> ExecutionResult {
 
     let mut cmd = Command::new("python");
     cmd.arg(source_path.to_str().unwrap());
+    
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
     run_with_limits(cmd, 5, 256, input).await
 }
 
@@ -98,6 +116,10 @@ async fn run_javascript(dir: &PathBuf, code: &str, input: &str) -> ExecutionResu
 
     let mut cmd = Command::new("node");
     cmd.arg(source_path.to_str().unwrap());
+
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
     run_with_limits(cmd, 5, 256, input).await
 }
 
@@ -122,19 +144,22 @@ async fn run_with_limits(mut cmd: Command, timeout_secs: u64, memory_limit_mb: u
     }
 
     let pid = child.id().unwrap_or(0);
-
     let memory_limit_bytes = memory_limit_mb * 1024 * 1024;
     let mem_exceeded = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let mem_exceeded_clone = mem_exceeded.clone();
 
+    // Background Memory Monitor
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(200)).await;
 
-            let wmic_out = Command::new("wmic")
-                .args(&["process", "where", &format!("ProcessId={}", pid), "get", "WorkingSetSize"])
-                .output()
-                .await;
+            let mut wmic = Command::new("wmic");
+            wmic.args(&["process", "where", &format!("ProcessId={}", pid), "get", "WorkingSetSize"]);
+            
+            #[cfg(target_os = "windows")]
+            wmic.creation_flags(CREATE_NO_WINDOW);
+
+            let wmic_out = wmic.output().await;
 
             let usage: u64 = wmic_out.ok()
                 .and_then(|o| {
@@ -145,10 +170,13 @@ async fn run_with_limits(mut cmd: Command, timeout_secs: u64, memory_limit_mb: u
 
             if usage > memory_limit_bytes {
                 mem_exceeded_clone.store(true, std::sync::atomic::Ordering::Relaxed);
-                let _ = Command::new("taskkill")
-                    .args(&["/F", "/T", "/PID", &pid.to_string()])
-                    .output()
-                    .await;
+                let mut kill = Command::new("taskkill");
+                kill.args(&["/F", "/T", "/PID", &pid.to_string()]);
+                
+                #[cfg(target_os = "windows")]
+                kill.creation_flags(CREATE_NO_WINDOW);
+                
+                let _ = kill.output().await;
                 break;
             }
         }

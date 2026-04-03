@@ -66,10 +66,11 @@ export default function App() {
 
         // Prevent Close Button from working
         const unlisten = appWindow.onCloseRequested((event) => {
-            // Block closing unless it's an emergency or we explicitly allow it
-            event.preventDefault();
+            // ✨ Sirf tab block karo jab contest chal raha ho
+            if (contestInfo) {
+                event.preventDefault();
+            }
         });
-
         window.addEventListener("blur", handleBlur);
         window.addEventListener("contextmenu", handleContextMenu);
         window.addEventListener("keydown", handleKeyDown);
@@ -93,6 +94,10 @@ export default function App() {
                         setParticipantId(pId);
                         setInitialScore(score);
                         setInitialSolved(solvedIds);
+                        // ✨ DYNAMIC LOCK: Contest join hote hi window lock karo
+                        appWindow.setFullscreen(true);   // Poori screen cover kar lo
+                        appWindow.setAlwaysOnTop(true);  // Koi aur window upar na aa sake
+                        appWindow.setResizable(false);   // Resize button band
                     }}
                 />
                 {/* Cheating Overlay even on dashboard if enabled */}
@@ -478,20 +483,17 @@ function ContestApp({
     };
 
     const handleLogout = () => {
+        // ✨ UNLOCK: Exit karte waqt sab normal kar do
+        appWindow.setFullscreen(false);
+        appWindow.setAlwaysOnTop(false);
+        appWindow.setResizable(true);
+
         setCode("");
         setLogs([]);
         setTimer(0);
-        setPeekCount(0);
-        setIsBlurred(true);
-        setCurrentLevel(1);
-        setScore(0);
-        setShowLevelComplete(false);
-        setShowGameComplete(false);
-        setSubmissionData({ status: "idle", message: "" });
-        setActiveSidebarTab("description");
+        // ... baaki ka purana code ...
         onExit();
     };
-
     const handleCodeChange = (newCode: string) => {
         setCode(newCode);
     };
@@ -502,12 +504,12 @@ function ContestApp({
         addLog(`🔄 Switched to ${newLang === "cpp" ? "C++" : newLang === "python" ? "Python" : "JavaScript"}`);
     };
 
-    const calculateScore = (timeTaken: number, peeks: number, difficulty: string) => {
-        const baseScore = difficulty === "easy" ? 100 : difficulty === "medium" ? 200 : 300;
-        const timeBonus = Math.max(0, Math.floor((currentChallenge.timeLimit - timeTaken) * 0.5));
-        const peekPenalty = peeks * 20;
-        return Math.max(0, baseScore + timeBonus - peekPenalty);
-    };
+    // const _calculateScore = (timeTaken: number, peeks: number, difficulty: string) => {
+    //     const baseScore = difficulty === "easy" ? 100 : difficulty === "medium" ? 200 : 300;
+    //     const timeBonus = Math.max(0, Math.floor((currentChallenge.timeLimit - timeTaken) * 0.5));
+    //     const peekPenalty = peeks * 20;
+    //     return Math.max(0, baseScore + timeBonus - peekPenalty);
+    // };
 
     const handleRun = async () => {
         if (isCompiling || !currentChallenge) return;
@@ -572,17 +574,14 @@ function ContestApp({
                 if (result.error || result.hasError) {
                     allPassed = false;
                     const errOutput = result.output || result.error || "Runtime Error";
-                    const isTLE = errOutput.startsWith("TIME LIMIT EXCEEDED");
-                    const isMLE = errOutput.startsWith("MEMORY LIMIT EXCEEDED");
-                    const errLabel = isTLE ? "Time Limit Exceeded" : isMLE ? "Memory Limit Exceeded" : "Runtime/Compile Error";
                     testResults.push({
                         input: tc.hidden ? '(hidden)' : tc.input,
                         expected: tc.hidden ? '(hidden)' : tc.expected,
-                        actual: isTLE || isMLE ? errOutput : (tc.hidden ? '(hidden)' : errOutput),
+                        actual: errOutput,
                         status: "error",
                         hidden: tc.hidden
                     });
-                    addLog(`❌ ${label} Failed: ${errLabel}.`);
+                    addLog(`❌ ${label} Failed.`);
                     break;
                 }
 
@@ -608,11 +607,12 @@ function ContestApp({
                         status: "failed",
                         hidden: tc.hidden
                     });
-                    addLog(`❌ ${label} Failed: Wrong Answer.`);
+                    addLog(`❌ ${label} Failed.`);
                 }
             }
 
-            let backendScore = 0;
+            // 1. Submit to Backend
+            let finalScoreFromBackend = score;
             try {
                 const submitRes = await apiSubmitScore(contestInfo.contestCode, participantId, {
                     passed: allPassed,
@@ -621,31 +621,27 @@ function ContestApp({
                     difficulty: currentChallenge.difficulty,
                     problemId: currentChallenge._id
                 });
-                if (submitRes.success && submitRes.passed) {
-                    backendScore = submitRes.scoreEarned || 0;
+
+                // ✨ THE FIX: Backend se jo score aaya wahi final hai
+                if (submitRes.success) {
+                    finalScoreFromBackend = submitRes.scoreEarned;
+                    setScore(finalScoreFromBackend);
                 }
             } catch (err) {
                 console.error("Failed to submit score to backend", err);
             }
 
             if (allPassed) {
-                const timeTaken = Math.floor((Date.now() - levelStartTime) / 1000);
-                const levelScore = backendScore > 0 ? backendScore : calculateScore(timeTaken, peekCount, currentChallenge.difficulty);
-
-                setScore((prev) => prev + levelScore);
-
                 setSubmissionData({
                     status: "accepted",
-                    message: "All test cases passed! Outstanding work.",
-                    score: levelScore,
-                    time: timeTaken,
-                    peeks: peekCount,
+                    message: "All test cases passed!",
+                    score: finalScoreFromBackend, // Updated total score
                     testResults: testResults,
                     passedCount,
                     totalCount: allTestCases.length
                 } as any);
 
-                addLog(`✅ SUBMISSION ACCEPTED: +${levelScore} pts`);
+                addLog(`✅ SUBMISSION ACCEPTED! Total Score: ${finalScoreFromBackend}`);
 
                 setTimeout(() => {
                     if (currentLevel >= problems.length) {
@@ -656,33 +652,19 @@ function ContestApp({
                 }, 1500);
             } else {
                 statusTracker.current.wrongSubmissions += 1;
-                const failedVisible = testResults.some(r => r.status === 'error' || (r.status === 'failed' && !r.hidden));
+                setSubmissionData({
+                    status: "rejected",
+                    message: `Failed. Passed ${passedCount}/${allTestCases.length}.`,
+                    testResults: testResults.filter(r => r.status !== 'passed'),
+                    passedCount,
+                    totalCount: allTestCases.length
+                } as any);
 
-                if (failedVisible) {
-                    setSubmissionData({
-                        status: "rejected",
-                        message: `Failed some sample test cases. Check your logic and expected outputs.`,
-                        testResults: testResults.filter(r => r.status === 'failed' && !r.hidden),
-                        passedCount,
-                        totalCount: allTestCases.length
-                    } as any);
-                } else {
-                    setSubmissionData({
-                        status: "rejected",
-                        message: `Sample cases passed, but hidden cases failed. Passed ${passedCount}/${allTestCases.length}.`,
-                        testResults: [],
-                        passedCount,
-                        totalCount: allTestCases.length
-                    } as any);
-                }
-
-                // ✨ NEW: Handles the 15 point penalty on wrong submission
-                setScore((prev) => prev - 15);
-                addLog(`❌ SUBMISSION REJECTED: Failed some test cases. -15 POINTS PENALTY.`);
+                addLog(`❌ SUBMISSION REJECTED. Score updated: ${finalScoreFromBackend}`);
             }
         } catch (error) {
-            setSubmissionData({ status: "error", message: "Failed to connect to compiler service." } as any);
-            addLog("❌ Failed to connect to compiler service");
+            setSubmissionData({ status: "error", message: "Compiler error." } as any);
+            addLog("❌ Connection Error");
         } finally {
             setIsCompiling(false);
         }
