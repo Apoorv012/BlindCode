@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import './Dashboard.css'
 import {
   apiGetContest, apiGetParticipants, apiPauseContest,
-  apiEndContest, apiAddParticipant, apiAddProblemToContest,
+  apiAddParticipant, apiAddProblemToContest,
   apiRemoveProblemFromContest, API_URL
 } from '../api'
 

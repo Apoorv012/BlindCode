@@ -56,7 +56,7 @@ export default function Editor({
 
     // NEW: Timer effect for the 10-second reveal
     useEffect(() => {
-        let timer: NodeJS.Timeout;
+        let timer: any;
         if (revealTimeLeft > 0) {
             timer = setInterval(() => {
                 setRevealTimeLeft((prev) => prev - 1);
@@ -165,8 +165,8 @@ export default function Editor({
                         onClick={handleRevealClick}
                         disabled={isTempRevealed}
                         className={`flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300 text-base font-semibold shadow-lg ${isTempRevealed
-                                ? "bg-[#3c3c3c] text-yellow-400 cursor-not-allowed"
-                                : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white hover:scale-105 shadow-red-500/25"
+                            ? "bg-[#3c3c3c] text-yellow-400 cursor-not-allowed"
+                            : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white hover:scale-105 shadow-red-500/25"
                             }`}
                     >
                         {isTempRevealed ? <Unlock size={20} /> : <Eye size={20} />}

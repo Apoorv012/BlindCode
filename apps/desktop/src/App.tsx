@@ -184,7 +184,7 @@ function ContestApp({
     const computedLevel = Math.min(initialSolved.length + 1, maxProblems);
     const [currentLevel, setCurrentLevel] = useState(computedLevel);
 
-    const [timer, setTimer] = useState(0);
+    const [_timer, setTimer] = useState(0);
     const [visionTimeLeft, setVisionTimeLeft] = useState(0);
     const [peekCount, setPeekCount] = useState(0);
     const [language, setLanguage] = useState("cpp");
