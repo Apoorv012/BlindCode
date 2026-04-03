@@ -6,8 +6,14 @@ const router = express.Router()
 
 // Generate next problem code e.g. PROB001
 const generateCode = async (): Promise<string> => {
-  const count = await Problem.countDocuments()
-  return `PROB${String(count + 1).padStart(3, '0')}`
+  const lastProblem = await Problem.findOne({}, { code: 1 }).sort({ code: -1 })
+  if (!lastProblem || !lastProblem.code) {
+    return 'PROB001'
+  }
+  const lastCode = lastProblem.code
+  const numPart = lastCode.replace('PROB', '')
+  const nextNum = (parseInt(numPart) || 0) + 1
+  return `PROB${String(nextNum).padStart(3, '0')}`
 }
 
 // GET /problems/:id/public — fetch full problem for desktop app (no auth required)
