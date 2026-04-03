@@ -781,8 +781,11 @@ function ContestApp({
                                 </div>
                                 <div className="w-px h-12 bg-[#3c3c3c]"></div>
                                 <div>
-                                    <p className="text-white text-3xl font-bold mb-1 tracking-widest">{formatTime(timer)}</p>
-                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Total Time</p>
+                                    {/* ✨ FIX: Changed 'timer' to 'contestTimeLeft' */}
+                                    <p className="text-white text-3xl font-bold mb-1 tracking-widest">
+                                        {formatTime(contestTimeLeft)}
+                                    </p>
+                                    <p className="text-[#666] text-[10px] uppercase tracking-widest">Time Left</p>
                                 </div>
                             </div>
                         </div>
