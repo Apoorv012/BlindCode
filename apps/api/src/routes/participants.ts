@@ -285,6 +285,8 @@ router.post('/participants/:participantId/heartbeat', async (req: express.Reques
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+
 // POST /participants/:participantId/submit
 router.post('/participants/:participantId/submit', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
   try {
@@ -297,56 +299,59 @@ router.post('/participants/:participantId/submit', async (req: express.Request<{
     const participant = contest.participants.id(participantId);
     if (!participant) return res.status(404).json({ message: 'Participant not found' });
 
+    // Ensure we have a valid problem ID
     const targetProblemId = problemId || participant.currentProblemId;
+    if (!targetProblemId) return res.status(400).json({ message: 'No problem context found' });
 
-    // 1. Problem Stats Set Karo
+    // 1. Problem Stats Track Karo (Penalties ke liye)
     let pStat = participant.problemStats?.find((ps: any) => ps.problemId.toString() === targetProblemId.toString());
     if (!pStat) {
       participant.problemStats.push({ problemId: targetProblemId, reveals: 0, wrongSubmissions: 0 });
       pStat = participant.problemStats[participant.problemStats.length - 1];
     }
 
-    // Update reveals (safeguard)
+    // Safeguard reveals count
     if (peeks > pStat.reveals) {
       pStat.reveals = peeks;
     }
 
-    // 2. Mark Solved / Wrong
+    // 2. Mark Solved / Update Wrong Submissions
     if (!passed) {
       participant.wrongSubmissions += 1;
       pStat.wrongSubmissions += 1;
     } else {
-      if (targetProblemId) {
-        if (!participant.solvedProblemIds) participant.solvedProblemIds = [];
-        const problemIdStr = targetProblemId.toString();
-        const alreadySolved = participant.solvedProblemIds.some((id: any) => id.toString() === problemIdStr);
+      if (!participant.solvedProblemIds) participant.solvedProblemIds = [];
+      const problemIdStr = targetProblemId.toString();
+      const alreadySolved = participant.solvedProblemIds.some((id: any) => id.toString() === problemIdStr);
 
-        if (!alreadySolved) {
-          participant.solvedProblemIds.push(targetProblemId);
-        }
+      if (!alreadySolved) {
+        participant.solvedProblemIds.push(targetProblemId);
       }
     }
 
-    // ✨ THE BULLETPROOF FIX: Har submit par poora score zero se calculate karo
-    let calculatedScore = 0;
+    // ✨ THE BULLETPROOF SCORE ENGINE
+    // Har submit par zero se refresh karo taaki koi legacy error na rahe
+    let totalCalculatedScore = 0;
 
-    // A. Add points for all solved problems
+    // A. Har solved problem ke points add karo
     for (const solvedId of participant.solvedProblemIds) {
       const prob = await Problem.findById(solvedId);
       if (prob) {
-        const diff = String(prob.difficulty).toLowerCase();
-        calculatedScore += prob.points || (diff === 'easy' ? 100 : diff === 'medium' ? 200 : 300);
+        // Model uses 'Easy', 'Medium', 'Hard'. Using fallback math just in case points is missing.
+        const d = String(prob.difficulty);
+        const fallbackPoints = d === 'Easy' ? 100 : d === 'Medium' ? 200 : 300;
+        totalCalculatedScore += (prob.points || fallbackPoints);
       }
     }
 
-    // B. Subtract ALL penalties (from every question they touched)
+    // B. Saare problems ki penalties minus karo (Wrong -15, Reveal -5)
     for (const stat of participant.problemStats) {
-      calculatedScore -= (stat.wrongSubmissions * 15);
-      calculatedScore -= (stat.reveals * 5);
+      totalCalculatedScore -= (stat.wrongSubmissions * 15);
+      totalCalculatedScore -= (stat.reveals * 5);
     }
 
-    // C. Save the exact calculated score to the Database
-    participant.score = calculatedScore;
+    // C. Save final data
+    participant.score = Math.max(0, totalCalculatedScore); // Score negative nahi jana chahiye
     participant.status = passed ? 'submitted' : 'coding';
     participant.lastActive = new Date();
     if (passed) participant.lastSubmitTime = new Date();
@@ -354,32 +359,22 @@ router.post('/participants/:participantId/submit', async (req: express.Request<{
     contest.markModified('participants');
     await contest.save();
 
-    // Trigger Admin and Contest UI updates
+    // Trigger UI updates
     try {
       getIo().to(`admin_${contest.contestCode}`).emit('participant_update');
       getIo().to(`contest_${contest.contestCode}`).emit('participant_update');
     } catch (e) { }
 
-    // If Wrong Submission
-    if (!passed) {
-      return res.json({ success: true, passed: false });
-    }
+    // 3. Response Dailog
+    // Hum Frontend ko updated 'score' bhej rahe hain taaki wo local setScore(res.score) kar sake.
+    // Isse inconsistency 0% ho jayegi.
+    res.json({
+      success: true,
+      passed: passed,
+      scoreEarned: participant.score, // Updated Total Score
+      isAccepted: passed
+    });
 
-    // ✨ SMART TRICK FOR FRONTEND:
-    // Hum Frontend ko sirf us problem ka base score wapas bhejenge. 
-    // Kyunki tumhara Frontend UI (-15 aur -5) already local state mein minus kar chuka hai, 
-    // jab woh local state mein is base score ko add karega, toh Frontend aur Backend ka data 
-    // magic ki tarah EXACTLY same match ho jayega!
-    let baseScore = 100;
-    if (targetProblemId) {
-      const actualProblem = await Problem.findById(targetProblemId);
-      if (actualProblem) baseScore = actualProblem.points || 100;
-    } else {
-      const diffLower = String(difficulty).toLowerCase();
-      baseScore = diffLower === "easy" ? 100 : diffLower === "medium" ? 200 : 300;
-    }
-
-    res.json({ success: true, passed: true, scoreEarned: baseScore });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

@@ -82,7 +82,7 @@ export default function Problems() {
   const openEdit = (p: Problem) => {
     setSelected(p)
     setForm({
-      title: p.title, difficulty: p.difficulty as 'Easy' | 'Medium' | 'Hard', 
+      title: p.title, difficulty: p.difficulty as 'Easy' | 'Medium' | 'Hard',
       points: p.points ?? 100, timeLimit: p.timeLimit ?? 300, tags: [...p.tags],
       description: p.description, inputFormat: p.inputFormat,
       outputFormat: p.outputFormat, constraints: p.constraints,
@@ -258,7 +258,7 @@ export default function Problems() {
                   </div>
                   <div className="detail-meta">
                     <span className={`diff-badge ${diffColor[selected.difficulty]}`}>{selected.difficulty}</span>
-                    <span className="tag">🏆 {selected.points ?? 100} pts</span>
+                    <span className="tag">POINTS {selected.points ?? 100} pts</span>
                     <span className="tag">⏱️ {selected.timeLimit ?? 300}s</span>
                     {selected.tags.map(t => <span key={t} className="tag">{t}</span>)}
                   </div>
