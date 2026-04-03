@@ -19,7 +19,7 @@ initSocket(server)
 
 app.use(
   cors({
-    origin: ['http://localhost:5174', 'https://blind-code-admin.vercel.app'],
+    origin: ['*'],
     credentials: true
   })
 )
