@@ -26,19 +26,106 @@ export default function App() {
     const [participantId, setParticipantId] = useState("");
     const [initialScore, setInitialScore] = useState(0);
     const [initialSolved, setInitialSolved] = useState<string[]>([]);
+    const [cheatingDetected, setCheatingDetected] = useState(false);
+    const [unlockCode, setUnlockCode] = useState("");
+
+    // SECURITY & ANTI-CHEAT (Global)
+    useEffect(() => {
+        const handleBlur = () => {
+             // Only detect cheating if we are actually in a contest and it hasn't ended
+             // We can check if contestInfo is set and status is not ended
+             if (contestInfo && contestInfo.status !== ContestStatus.ENDED) {
+                setCheatingDetected(true);
+             }
+        };
+
+        const handleContextMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            return false;
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Disable DevTools
+            if (e.key === "F12" || (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C" || e.key === "K"))) {
+                e.preventDefault();
+                return false;
+            }
+            // Disable Refresh
+            if (e.key === "F5" || (e.ctrlKey && e.key === "r")) {
+                e.preventDefault();
+                return false;
+            }
+            // Disable Copy/Paste after contest starts (or just always for security)
+            if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "x")) {
+                e.preventDefault();
+                return false;
+            }
+            // Emergency Exit for Testing (Always works)
+            if (e.ctrlKey && e.shiftKey && e.code === "KeyQ") {
+                exit(0);
+            }
+        };
+
+        // Prevent Close Button from working
+        const unlisten = appWindow.onCloseRequested((event) => {
+            // Block closing unless it's an emergency or we explicitly allow it
+            event.preventDefault();
+        });
+
+        window.addEventListener("blur", handleBlur);
+        window.addEventListener("contextmenu", handleContextMenu);
+        window.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            unlisten.then(f => f());
+            window.removeEventListener("blur", handleBlur);
+            window.removeEventListener("contextmenu", handleContextMenu);
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [contestInfo]);
 
     if (!contestInfo) {
         return (
-            <UserDashboard
-                onContestJoined={(_contestId, teamName, password, info, pId, score, solvedIds) => {
-                    setJoinedTeamName(teamName);
-                    setJoinedPassword(password);
-                    setContestInfo(info);
-                    setParticipantId(pId);
-                    setInitialScore(score);
-                    setInitialSolved(solvedIds);
-                }}
-            />
+            <>
+                <UserDashboard
+                    onContestJoined={(_contestId, teamName, password, info, pId, score, solvedIds) => {
+                        setJoinedTeamName(teamName);
+                        setJoinedPassword(password);
+                        setContestInfo(info);
+                        setParticipantId(pId);
+                        setInitialScore(score);
+                        setInitialSolved(solvedIds);
+                    }}
+                />
+                {/* Cheating Overlay even on dashboard if enabled */}
+                {cheatingDetected && (
+                    <div className="fixed inset-0 bg-red-950/95 backdrop-blur-2xl flex items-center justify-center z-[500] p-8">
+                         <div className="bg-black border-4 border-red-600 rounded-3xl p-16 text-center max-w-2xl">
+                            <h2 className="text-4xl font-black text-white mb-6">DEVICE LOCKED</h2>
+                            <p className="text-red-500 mb-8 font-bold">FOCUS LOST. PLEASE CONTACT ADMIN.</p>
+                            <input 
+                                type="password" 
+                                placeholder="ADMIN UNLOCK CODE"
+                                value={unlockCode}
+                                onChange={(e) => setUnlockCode(e.target.value)}
+                                className="w-full bg-[#111] border border-red-600 rounded-xl px-6 py-4 text-white text-center mb-4"
+                            />
+                            <button 
+                                onClick={() => {
+                                    if (unlockCode === "IEEE-ADMIN") {
+                                        setCheatingDetected(false);
+                                        setUnlockCode("");
+                                        appWindow.setFocus();
+                                    }
+                                }}
+                                className="w-full py-4 bg-red-600 text-white rounded-xl font-bold"
+                            >
+                                Unlock
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </>
         );
     }
 
@@ -51,6 +138,10 @@ export default function App() {
             initialScore={initialScore}
             initialSolved={initialSolved}
             onExit={() => setContestInfo(null)}
+            cheatingDetected={cheatingDetected}
+            setCheatingDetected={setCheatingDetected}
+            unlockCode={unlockCode}
+            setUnlockCode={setUnlockCode}
         />
     );
 }
@@ -68,6 +159,10 @@ function ContestApp({
     initialScore,
     initialSolved,
     onExit,
+    cheatingDetected,
+    setCheatingDetected,
+    unlockCode,
+    setUnlockCode,
 }: {
     contestInfo: ContestInfo;
     joinedTeamName: string;
@@ -76,6 +171,10 @@ function ContestApp({
     initialScore: number;
     initialSolved: string[];
     onExit: () => void;
+    cheatingDetected: boolean;
+    setCheatingDetected: (v: boolean) => void;
+    unlockCode: string;
+    setUnlockCode: (v: string) => void;
 }) {
     const [teamName] = useState(joinedTeamName);
     const [_password] = useState(joinedPassword);
@@ -133,14 +232,22 @@ function ContestApp({
     const [submissionData, setSubmissionData] = useState<SubmissionData>({ status: "idle", message: "" });
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardParticipant[]>([]);
     const [contestEnded, setContestEnded] = useState(contestInfo.status === ContestStatus.ENDED);
-    const [cheatingDetected, setCheatingDetected] = useState(false);
-    const [unlockCode, setUnlockCode] = useState("");
 
     // Fetch Leaderboard when event arrives
     const fetchLb = useCallback(() => {
         if (!contestInfo?.contestCode) return;
         apiGetLeaderboard(contestInfo.contestCode)
-            .then(data => setLeaderboardData(data))
+            .then(data => {
+                // Ensure the data matches LeaderboardParticipant type
+                const mappedData: LeaderboardParticipant[] = data.map((p: any) => ({
+                    ...p,
+                    _id: p._id || "",
+                    status: p.status || "coding",
+                    reveals: p.reveals || 0,
+                    wrongSubmissions: p.wrongSubmissions || 0
+                }));
+                setLeaderboardData(mappedData);
+            })
             .catch(err => console.error("Failed to update leaderboard:", err));
     }, [contestInfo?.contestCode]);
 
@@ -280,67 +387,6 @@ function ContestApp({
 
         return () => clearTimeout(timeoutId);
     }, [socket]);
-
-    // SECURITY & ANTI-CHEAT
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.hidden && !contestEnded) {
-                setCheatingDetected(true);
-                addLog("⚠️ CHEATING DETECTED: Application lost focus!");
-            }
-        };
-
-        const handleBlur = () => {
-            if (!contestEnded) {
-                setCheatingDetected(true);
-                addLog("⚠️ CHEATING DETECTED: Window blurred!");
-            }
-        }
-
-        const handleContextMenu = (e: MouseEvent) => {
-            e.preventDefault();
-            return false;
-        };
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Disable DevTools
-            if (e.key === "F12" || (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C" || e.key === "K"))) {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Refresh
-            if (e.key === "F5" || (e.ctrlKey && e.key === "r")) {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Copy/Paste after contest starts
-            if (e.ctrlKey && (e.key === "c" || e.key === "v" || e.key === "x")) {
-                e.preventDefault();
-                return false;
-            }
-            // Disable Alt+Tab disruptions (some handled by OS, but we catch others)
-            if (e.altKey && (e.key === "Tab" || e.key === "F4")) {
-                e.preventDefault();
-                return false;
-            }
-            // Emergency Exit for Testing
-            if (e.ctrlKey && e.shiftKey && e.key === "Q") {
-                exit(0);
-            }
-        };
-
-        document.addEventListener("visibilitychange", handleVisibilityChange);
-        window.addEventListener("blur", handleBlur);
-        window.addEventListener("contextmenu", handleContextMenu);
-        window.addEventListener("keydown", handleKeyDown);
-
-        return () => {
-            document.removeEventListener("visibilitychange", handleVisibilityChange);
-            window.removeEventListener("blur", handleBlur);
-            window.removeEventListener("contextmenu", handleContextMenu);
-            window.removeEventListener("keydown", handleKeyDown);
-        };
-    }, [contestEnded, addLog]);
 
     useEffect(() => {
         if (visionTimeLeft > 0) {
