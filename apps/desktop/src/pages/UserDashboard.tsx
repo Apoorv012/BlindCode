@@ -68,7 +68,6 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
         return;
       }
       setContest(data);
-      // Attempt to join the contest with team credentials
       const joinData = await apiJoinContest(code, teamName, password);
       const joinedParticipantId = joinData.participantId;
       const score = joinData.score || 0;
@@ -79,7 +78,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
       if (data.status === ContestStatus.RUNNING) {
         onContestJoined(data._id, teamName, password, data, joinedParticipantId, score, solvedIds);
       } else {
-        setScreen("waiting"); // draft or paused — wait for admin to start
+        setScreen("waiting");
       }
     } catch (err: any) {
       setError(err.message || "Invalid contest code or credentials.");
@@ -88,24 +87,29 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
     }
   };
 
-
-
   return (
     <div className="ud-root">
-      {/* Background grid */}
       <div className="ud-grid-bg" />
-
-      {/* Glow orb */}
       <div className="ud-glow" />
 
       <div className="ud-center">
-        {/* Logo */}
+        {/* ── IEEE Branding Section ── */}
+        <div className="ud-branding-container">
+          <img
+            src="/ieee-logo.png"
+            alt="IEEE SB JIIT"
+            className="ud-ieee-img"
+          />
+          <p className="ud-presents-text">PRESENTS</p>
+        </div>
+
+        {/* BlindCode Main Logo */}
         <div className="ud-logo">
           <Zap size={22} className="ud-logo-icon" />
           <span className="ud-logo-text">BLINDCODE</span>
         </div>
 
-        {/* ── Screen 1: Login ── */}
+        {/* Screen 1: Login */}
         {screen === "login" && (
           <div className="ud-card ud-card-name">
             <div className="ud-card-eyebrow">TEAM AUTHENTICATION</div>
@@ -128,7 +132,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
                 onChange={e => { setPassword(e.target.value); setError(""); }}
                 onKeyDown={e => e.key === "Enter" && teamName.trim() && handleLoginSubmit()}
                 placeholder="Password"
-                style={{ marginTop: 8 }}
+                style={{ marginTop: 12 }}
               />
               {error && (
                 <div className="ud-error">
@@ -148,7 +152,7 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
           </div>
         )}
 
-        {/* ── Screen 2: Enter Code ── */}
+        {/* Screen 2: Enter Code */}
         {screen === "enter-code" && (
           <div className="ud-card ud-card-enter">
             <div className="ud-card-eyebrow">PARTICIPANT ACCESS</div>
@@ -183,40 +187,28 @@ export default function UserDashboard({ onContestJoined }: UserDashboardProps) {
                 onClick={handleCodeSubmit}
                 disabled={loading || !codeInput.trim()}
               >
-                {loading
-                  ? <><Loader2 size={16} className="ud-spin" /> Joining...</>
-                  : <> Verify Code <ArrowRight size={16} /></>
-                }
+                {loading ? <><Loader2 size={16} className="ud-spin" /> Joining...</> : <> Verify Code <ArrowRight size={16} /></>}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── Screen 3: Waiting Room ── */}
+        {/* Screen 3: Waiting Room */}
         {screen === "waiting" && contest && (
           <div className="ud-card ud-card-waiting">
             <div className="ud-waiting-icon">
               <Users size={32} className="ud-waiting-users" />
             </div>
-
             <h2 className="ud-waiting-title">You're In!</h2>
             <p className="ud-waiting-name">{teamName}</p>
-
             <div className="ud-waiting-contest">
               <span className="ud-contest-code-tag">{contest.contestCode}</span>
               <span className="ud-waiting-cname">{contest.name}</span>
             </div>
-
             <div className="ud-waiting-status">
               <span className="ud-waiting-dot" />
-              <span className="ud-waiting-label">
-                Waiting for admin to start{".".repeat(dots)}
-              </span>
+              <span className="ud-waiting-label">Waiting for admin to start{".".repeat(dots)}</span>
             </div>
-
-            <p className="ud-waiting-hint">
-              The contest will begin automatically when your instructor starts it.
-            </p>
           </div>
         )}
       </div>

@@ -15,7 +15,7 @@
       "http": {
         "all": true,
         "scope": [
-          "http://13.206.10.105/*",
+          "https://api.blindcode.xyz/*",
           "https://api-production-cf11.up.railway.app/*",
           "http://localhost:4000/*"
         ]
@@ -61,7 +61,7 @@
       }
     },
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://13.206.10.105:80 https://api-production-cf11.up.railway.app http://localhost:4000; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; worker-src 'self' blob:;"
+      "csp": "default-src 'self'; connect-src 'self' https://api.blindcode.xyz https://api-production-cf11.up.railway.app http://localhost:4000; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; worker-src 'self' blob:;"
     },
     "updater": {
       "active": false

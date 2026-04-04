@@ -3,7 +3,7 @@ import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
 import Leaderboard from "./components/Leaderboard";
-import { LogOut, Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle } from "lucide-react";
+import { Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle } from "lucide-react";
 import { appWindow } from "@tauri-apps/api/window";
 import { exit } from "@tauri-apps/api/process";
 import type { Challenge } from "./data/questions";
@@ -932,13 +932,13 @@ function ContestApp({
                             </div>
                         </div>
 
-                        <button
+                        {/* <button
                             onClick={handleLogout}
                             className="flex items-center gap-2 px-5 py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-600/40 text-red-400 rounded-xl transition-all text-base font-semibold"
                         >
                             <LogOut size={18} />
                             <span>Quit</span>
-                        </button>
+                        </button> */}
                     </div>
                 </div>
 
