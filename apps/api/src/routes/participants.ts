@@ -1,8 +1,8 @@
 import express from 'express'
 import Contest, { ContestStatusEnum } from '../models/Contest'
-import Problem from '../models/Problem'
 import { protect, AuthRequest } from '../middleware/auth'
 import { getIo } from '../socket'
+import { recalculateScore } from '../scoreEngine'
 
 const router = express.Router({ mergeParams: true })
 
@@ -253,10 +253,12 @@ router.post('/bulk', protect, async (req: AuthRequest & express.Request<ContestP
 })
 
 // POST /participants/:participantId/heartbeat
+// Lightweight — only syncs status, compiles, currentProblemId.
+// Penalties (reveals, wrongSubmissions) are handled via socket 'apply_penalty'.
 router.post('/participants/:participantId/heartbeat', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
   try {
     const { contestId, participantId } = req.params;
-    const { status, compiles, wrongSubmissions, reveals, currentProblemId } = req.body;
+    const { status, compiles, currentProblemId } = req.body;
 
     const contest = await Contest.findOne({ contestCode: contestId });
     if (!contest) {
@@ -272,10 +274,7 @@ router.post('/participants/:participantId/heartbeat', async (req: express.Reques
 
     if (status) participant.status = status;
     if (typeof compiles === 'number') participant.compiles = compiles;
-    if (typeof wrongSubmissions === 'number') participant.wrongSubmissions = wrongSubmissions;
-    if (typeof reveals === 'number') participant.reveals = reveals;
     if (currentProblemId) participant.currentProblemId = currentProblemId;
-
     participant.lastActive = new Date();
 
     await contest.save();
@@ -291,87 +290,76 @@ router.post('/participants/:participantId/heartbeat', async (req: express.Reques
 router.post('/participants/:participantId/submit', async (req: express.Request<{ contestId: string; participantId: string }>, res) => {
   try {
     const { contestId, participantId } = req.params;
-    const { passed, timeTaken, peeks, difficulty, problemId } = req.body;
+    const { passed, problemId } = req.body;
 
-    const contest = await Contest.findOne({ contestCode: contestId });
-    if (!contest) return res.status(404).json({ message: 'Contest not found' });
-
-    const participant = contest.participants.id(participantId);
-    if (!participant) return res.status(404).json({ message: 'Participant not found' });
-
-    // Ensure we have a valid problem ID
-    const targetProblemId = problemId || participant.currentProblemId;
-    if (!targetProblemId) return res.status(400).json({ message: 'No problem context found' });
-
-    // 1. Problem Stats Track Karo (Penalties ke liye)
-    let pStat = participant.problemStats?.find((ps: any) => ps.problemId.toString() === targetProblemId.toString());
-    if (!pStat) {
-      participant.problemStats.push({ problemId: targetProblemId, reveals: 0, wrongSubmissions: 0 });
-      pStat = participant.problemStats[participant.problemStats.length - 1];
-    }
-
-    // Safeguard reveals count
-    if (peeks > pStat.reveals) {
-      pStat.reveals = peeks;
-    }
-
-    // 2. Mark Solved / Update Wrong Submissions
+    // Step 1: If wrong submission, atomically increment the counter
     if (!passed) {
-      participant.wrongSubmissions += 1;
-      pStat.wrongSubmissions += 1;
-    } else {
+      await Contest.updateOne(
+        { contestCode: contestId, 'participants._id': participantId },
+        {
+          $inc: { 'participants.$.wrongSubmissions': 1 },
+          $set: {
+            'participants.$.status': 'coding',
+            'participants.$.lastActive': new Date()
+          }
+        }
+      );
+    }
+
+    // Step 2: If passed, mark as solved
+    if (passed) {
+      const contest = await Contest.findOne({ contestCode: contestId });
+      if (!contest) return res.status(404).json({ message: 'Contest not found' });
+
+      const participant = contest.participants.id(participantId);
+      if (!participant) return res.status(404).json({ message: 'Participant not found' });
+
+      const targetProblemId = problemId || participant.currentProblemId;
+      if (!targetProblemId) return res.status(400).json({ message: 'No problem context found' });
+
       if (!participant.solvedProblemIds) participant.solvedProblemIds = [];
-      const problemIdStr = targetProblemId.toString();
-      const alreadySolved = participant.solvedProblemIds.some((id: any) => id.toString() === problemIdStr);
+      const alreadySolved = participant.solvedProblemIds.some(
+        (id: any) => id.toString() === targetProblemId.toString()
+      );
 
       if (!alreadySolved) {
         participant.solvedProblemIds.push(targetProblemId);
       }
+
+      participant.status = 'submitted';
+      participant.lastActive = new Date();
+      participant.lastSubmitTime = new Date();
+
+      contest.markModified('participants');
+      await contest.save();
     }
 
-    // ✨ THE BULLETPROOF SCORE ENGINE
-    // Har submit par zero se refresh karo taaki koi legacy error na rahe
-    let totalCalculatedScore = 0;
+    // Step 3: Read FRESH data and recalculate score
+    const freshContest = await Contest.findOne({ contestCode: contestId });
+    if (!freshContest) return res.status(404).json({ message: 'Contest not found' });
 
-    // A. Har solved problem ke points add karo
-    for (const solvedId of participant.solvedProblemIds) {
-      const prob = await Problem.findById(solvedId);
-      if (prob) {
-        // Model uses 'Easy', 'Medium', 'Hard'. Using fallback math just in case points is missing.
-        const d = String(prob.difficulty);
-        const fallbackPoints = d === 'Easy' ? 100 : d === 'Medium' ? 200 : 300;
-        totalCalculatedScore += (prob.points || fallbackPoints);
-      }
-    }
+    const freshParticipant = freshContest.participants.id(participantId);
+    if (!freshParticipant) return res.status(404).json({ message: 'Participant not found' });
 
-    // B. Saare problems ki penalties minus karo (Wrong -15, Reveal -5)
-    for (const stat of participant.problemStats) {
-      totalCalculatedScore -= (stat.wrongSubmissions * 15);
-      totalCalculatedScore -= (stat.reveals * 5);
-    }
+    const newScore = await recalculateScore(freshParticipant);
 
-    // C. Save final data
-    participant.score = Math.max(0, totalCalculatedScore); // Score negative nahi jana chahiye
-    participant.status = passed ? 'submitted' : 'coding';
-    participant.lastActive = new Date();
-    if (passed) participant.lastSubmitTime = new Date();
+    // Step 4: Atomic score update
+    await Contest.updateOne(
+      { contestCode: contestId, 'participants._id': participantId },
+      { $set: { 'participants.$.score': newScore } }
+    );
 
-    contest.markModified('participants');
-    await contest.save();
-
-    // Trigger UI updates
+    // Step 5: Trigger UI updates
     try {
-      getIo().to(`admin_${contest.contestCode}`).emit('participant_update');
-      getIo().to(`contest_${contest.contestCode}`).emit('participant_update');
+      getIo().to(`admin_${freshContest.contestCode}`).emit('participant_update');
+      getIo().to(`contest_${freshContest.contestCode}`).emit('participant_update');
     } catch (e) { }
 
-    // 3. Response Dailog
-    // Hum Frontend ko updated 'score' bhej rahe hain taaki wo local setScore(res.score) kar sake.
-    // Isse inconsistency 0% ho jayegi.
+    // Step 6: Send backend score as source of truth
     res.json({
       success: true,
       passed: passed,
-      scoreEarned: participant.score, // Updated Total Score
+      scoreEarned: newScore,
       isAccepted: passed
     });
 

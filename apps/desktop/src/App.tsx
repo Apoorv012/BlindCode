@@ -3,7 +3,7 @@ import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
 import Leaderboard from "./components/Leaderboard";
-import { Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle } from "lucide-react";
+import { Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle, ArrowRight } from "lucide-react";
 import { appWindow } from "@tauri-apps/api/window";
 import { exit } from "@tauri-apps/api/process";
 import type { Challenge } from "./data/questions";
@@ -191,7 +191,6 @@ function ContestApp({
 
     const [_timer, setTimer] = useState(0);
     const [visionTimeLeft, setVisionTimeLeft] = useState(0);
-    const [peekCount, setPeekCount] = useState(0);
     const [language, setLanguage] = useState("cpp");
     const [isCompiling, setIsCompiling] = useState(false);
     const [contestTimeLeft, setContestTimeLeft] = useState(0);
@@ -206,8 +205,6 @@ function ContestApp({
     const statusTracker = useRef({
         status: 'idle',
         compiles: 0,
-        wrongSubmissions: 0,
-        reveals: 0
     });
 
     const [editorHeight, setEditorHeight] = useState(65);
@@ -259,16 +256,29 @@ function ContestApp({
         fetchLb();
     }, [fetchLb]);
 
-    // ✨ NEW: Handles the 10-second reveal penalty (5 points)
+    // ✨ Reveal handlers — send penalty to backend via socket, score comes back via 'score_update'
     const handleRevealFull = () => {
-        setScore((prev) => prev - 5);
-        statusTracker.current.reveals += 1;
+        if (socket && socket.connected) {
+            socket.emit('apply_penalty', {
+                contestId: contestInfo.contestCode,
+                participantId,
+                type: 'reveal',
+                problemId: currentChallenge?._id
+            });
+        }
         addLog(`🔓 Reveal Activated for 10s! -5 POINTS PENALTY.`);
     };
 
     const handlePartialVision = (cost: number, text: string) => {
         setTimer(prev => prev + cost);
-        statusTracker.current.reveals += 1;
+        if (socket && socket.connected) {
+            socket.emit('apply_penalty', {
+                contestId: contestInfo.contestCode,
+                participantId,
+                type: 'reveal',
+                problemId: currentChallenge?._id
+            });
+        }
         addLog(`👁️ Partial Vision used! +${cost}s penalty.`);
         addLog(`   Revealed: "${text.substring(0, 20)}${text.length > 20 ? "..." : ""}"`);
     };
@@ -330,6 +340,11 @@ function ContestApp({
             fetchLb();
         });
 
+        // ✨ Backend sends this after every penalty / score change
+        newSocket.on("score_update", (payload: { score: number }) => {
+            setScore(payload.score);
+        });
+
         // ✨ FIX: Super bulletproof contest_update listener
         newSocket.on("contest_update", (payload) => {
             // 1. DIRECT SOCKET OVERRIDE (Fetch ka jhanjhat khatam)
@@ -373,16 +388,14 @@ function ContestApp({
         contestCode: contestInfo.contestCode,
         participantId: participantId,
         problemId: currentChallenge?._id,
-        score: score,
     });
     useEffect(() => {
         latestBeatPayload.current = {
             contestCode: contestInfo.contestCode,
             participantId: participantId,
             problemId: currentChallenge?._id,
-            score: score,
         };
-    }, [contestInfo.contestCode, participantId, currentChallenge?._id, score]);
+    }, [contestInfo.contestCode, participantId, currentChallenge?._id]);
 
     useEffect(() => {
         let timeoutId: ReturnType<typeof setTimeout>;
@@ -395,10 +408,7 @@ function ContestApp({
                     participantId: currentObj.participantId,
                     status: statusTracker.current.compiles > 0 ? 'coding' : 'idle',
                     compiles: statusTracker.current.compiles,
-                    wrongSubmissions: statusTracker.current.wrongSubmissions,
-                    reveals: statusTracker.current.reveals,
                     currentProblemId: currentObj.problemId,
-                    score: currentObj.score
                 });
             }
             timeoutId = setTimeout(beat, 10000 + Math.floor(Math.random() * 2000));
@@ -570,6 +580,7 @@ function ContestApp({
         const testResults = [];
 
         try {
+            // --- Test Case Loop ---
             for (let i = 0; i < allTestCases.length; i++) {
                 const tc = allTestCases[i];
                 const label = tc.hidden ? `Hidden Case ${i + 1}` : `Case ${i + 1}`;
@@ -579,11 +590,10 @@ function ContestApp({
 
                 if (result.error || result.hasError) {
                     allPassed = false;
-                    const errOutput = result.output || result.error || "Runtime Error";
                     testResults.push({
                         input: tc.hidden ? '(hidden)' : tc.input,
                         expected: tc.hidden ? '(hidden)' : tc.expected,
-                        actual: errOutput,
+                        actual: result.output || result.error || "Runtime Error",
                         status: "error",
                         hidden: tc.hidden
                     });
@@ -617,47 +627,43 @@ function ContestApp({
                 }
             }
 
-            // 1. Submit to Backend
-            let finalScoreFromBackend = score;
+            // --- Submit to Backend & Get Source of Truth ---
+            let updatedTotalScore = score;
             try {
                 const submitRes = await apiSubmitScore(contestInfo.contestCode, participantId, {
                     passed: allPassed,
                     timeTaken: Math.floor((Date.now() - levelStartTime) / 1000),
-                    peeks: peekCount,
+                    peeks: 0, // Not used anymore, backend tracks via socket
                     difficulty: currentChallenge.difficulty,
                     problemId: currentChallenge._id
                 });
 
-                // ✨ THE FIX: Backend se jo score aaya wahi final hai
                 if (submitRes.success) {
-                    finalScoreFromBackend = submitRes.scoreEarned;
-                    setScore(finalScoreFromBackend);
+                    updatedTotalScore = submitRes.scoreEarned;
+                    setScore(updatedTotalScore);
                 }
             } catch (err) {
-                console.error("Failed to submit score to backend", err);
+                console.error("Score Sync Failed:", err);
             }
 
+            // --- Final UI Update based on Backend Score ---
             if (allPassed) {
                 setSubmissionData({
                     status: "accepted",
                     message: "All test cases passed!",
-                    score: finalScoreFromBackend, // Updated total score
-                    testResults: testResults,
+                    score: updatedTotalScore,
+                    testResults,
                     passedCount,
                     totalCount: allTestCases.length
                 } as any);
 
-                addLog(`✅ SUBMISSION ACCEPTED! Total Score: ${finalScoreFromBackend}`);
+                addLog(`✅ SUBMISSION ACCEPTED! Total Score: ${updatedTotalScore}`);
 
                 setTimeout(() => {
-                    if (currentLevel >= problems.length) {
-                        setShowGameComplete(true);
-                    } else {
-                        setShowLevelComplete(true);
-                    }
+                    if (currentLevel >= problems.length) setShowGameComplete(true);
+                    else setShowLevelComplete(true);
                 }, 1500);
             } else {
-                statusTracker.current.wrongSubmissions += 1;
                 setSubmissionData({
                     status: "rejected",
                     message: `Failed. Passed ${passedCount}/${allTestCases.length}.`,
@@ -666,23 +672,21 @@ function ContestApp({
                     totalCount: allTestCases.length
                 } as any);
 
-                addLog(`❌ SUBMISSION REJECTED. Score updated: ${finalScoreFromBackend}`);
+                addLog(`❌ SUBMISSION REJECTED. Updated Total Score: ${updatedTotalScore}`);
             }
+
         } catch (error: any) {
             setSubmissionData({ status: "error", message: "Compiler error." } as any);
-            addLog(`❌ Critical Connection Error: ${error.message || "Unknown error"}`);
-            console.error(error);
+            addLog(`❌ Connection Error: ${error.message || "Unknown error"}`);
         } finally {
             setIsCompiling(false);
         }
     };
-
     const handleNextLevel = () => {
         setShowLevelComplete(false);
         setCurrentLevel((prev) => prev + 1);
         const nextChallenge = problems[currentLevel];
         setCode(nextChallenge?.starterCode[language] ?? "");
-        setPeekCount(0);
         setIsBlurred(true);
         setLevelStartTime(Date.now());
         setActiveSidebarTab("description");
@@ -694,8 +698,14 @@ function ContestApp({
 
     const handleVision = () => {
         if (visionTimeLeft > 0) return;
-        setPeekCount((prev) => prev + 1);
-        statusTracker.current.reveals += 1;
+        if (socket && socket.connected) {
+            socket.emit('apply_penalty', {
+                contestId: contestInfo.contestCode,
+                participantId,
+                type: 'reveal',
+                problemId: currentChallenge?._id
+            });
+        }
         setIsBlurred(false);
         setVisionTimeLeft(5);
         setTimer(prev => prev + 30);
@@ -744,7 +754,6 @@ function ContestApp({
                     </div>
                 </div>
             )}
-
             {showGameComplete && !contestEnded && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-100 p-8">
                     <div className="bg-[#252526] border border-green-500/30 rounded-3xl p-14 text-center max-w-xl shadow-[0_0_50px_rgba(16,185,129,0.2)] relative overflow-hidden">
@@ -757,10 +766,14 @@ function ContestApp({
                             <div className="bg-green-500/10 p-8 rounded-2xl border border-green-500/20 mb-10">
                                 <h3 className="text-green-400 text-2xl font-bold mb-2">Congratulations!</h3>
                                 <p className="text-[#cccccc] text-lg">You have successfully completed all questions.</p>
-                                <div className="mt-6 flex flex-col items-center gap-2">
-                                    <Loader2 className="text-green-500 animate-spin" size={32} />
-                                    <p className="text-green-500 font-bold animate-pulse text-sm uppercase tracking-widest">Please wait for the contest to end...</p>
-                                </div>
+
+                                {/* ✨ NEW: EXIT HALL BUTTON */}
+                                <button
+                                    onClick={handleLogout}
+                                    className="mt-8 px-10 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xl transition-all hover:scale-105 shadow-lg flex items-center gap-3 mx-auto"
+                                >
+                                    Exit Hall <ArrowRight size={24} />
+                                </button>
                             </div>
 
                             <div className="bg-black/50 p-6 rounded-2xl border border-[#3c3c3c] mb-10 flex justify-center gap-12">
@@ -770,7 +783,6 @@ function ContestApp({
                                 </div>
                                 <div className="w-px h-12 bg-[#3c3c3c]"></div>
                                 <div>
-                                    {/* ✨ FIX: Changed 'timer' to 'contestTimeLeft' */}
                                     <p className="text-white text-3xl font-bold mb-1 tracking-widest">
                                         {formatTime(contestTimeLeft)}
                                     </p>

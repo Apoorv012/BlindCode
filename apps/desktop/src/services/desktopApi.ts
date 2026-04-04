@@ -46,7 +46,7 @@ export const apiGetContestStatus = async (contestCode: string) => {
 export interface SubmitScorePayload {
   passed: boolean;
   timeTaken: number;
-  peeks: number;
+  peeks?: number; // Deprecated — backend tracks via socket. Kept for backwards compat.
   difficulty: string;
   problemId?: string;
 }
@@ -59,23 +59,6 @@ export const apiSubmitScore = async (contestCode: string, participantId: string,
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message || 'Failed to submit score')
-  return data
-}
-
-export const apiHeartbeat = async (contestCode: string, participantId: string, payload: {
-  status: string;
-  compiles?: number;
-  wrongSubmissions?: number;
-  reveals?: number;
-  currentProblemId?: string;
-}) => {
-  const res = await fetch(`${API_URL}/contests/${contestCode}/participants/${participantId}/heartbeat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  const data = await res.json()
-  if (!res.ok) console.error('Heartbeat failed:', data.message)
   return data
 }
 
