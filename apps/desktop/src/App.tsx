@@ -3,7 +3,7 @@ import Editor from "./components/Editor";
 import Terminal from "./components/Terminal";
 import ProblemSidebar, { type SubmissionData, type LeaderboardParticipant } from "./components/ProblemSidebar";
 import Leaderboard from "./components/Leaderboard";
-import { Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle } from "lucide-react";
+import { Trophy, Target, Clock, Zap, Loader2, Award, AlertTriangle, ArrowRight } from "lucide-react";
 import { appWindow } from "@tauri-apps/api/window";
 import { exit } from "@tauri-apps/api/process";
 import type { Challenge } from "./data/questions";
@@ -744,7 +744,6 @@ function ContestApp({
                     </div>
                 </div>
             )}
-
             {showGameComplete && !contestEnded && (
                 <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center z-100 p-8">
                     <div className="bg-[#252526] border border-green-500/30 rounded-3xl p-14 text-center max-w-xl shadow-[0_0_50px_rgba(16,185,129,0.2)] relative overflow-hidden">
@@ -757,10 +756,14 @@ function ContestApp({
                             <div className="bg-green-500/10 p-8 rounded-2xl border border-green-500/20 mb-10">
                                 <h3 className="text-green-400 text-2xl font-bold mb-2">Congratulations!</h3>
                                 <p className="text-[#cccccc] text-lg">You have successfully completed all questions.</p>
-                                <div className="mt-6 flex flex-col items-center gap-2">
-                                    <Loader2 className="text-green-500 animate-spin" size={32} />
-                                    <p className="text-green-500 font-bold animate-pulse text-sm uppercase tracking-widest">Please wait for the contest to end...</p>
-                                </div>
+
+                                {/* ✨ NEW: EXIT HALL BUTTON */}
+                                <button
+                                    onClick={handleLogout}
+                                    className="mt-8 px-10 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xl transition-all hover:scale-105 shadow-lg flex items-center gap-3 mx-auto"
+                                >
+                                    Exit Hall <ArrowRight size={24} />
+                                </button>
                             </div>
 
                             <div className="bg-black/50 p-6 rounded-2xl border border-[#3c3c3c] mb-10 flex justify-center gap-12">
@@ -770,7 +773,6 @@ function ContestApp({
                                 </div>
                                 <div className="w-px h-12 bg-[#3c3c3c]"></div>
                                 <div>
-                                    {/* ✨ FIX: Changed 'timer' to 'contestTimeLeft' */}
                                     <p className="text-white text-3xl font-bold mb-1 tracking-widest">
                                         {formatTime(contestTimeLeft)}
                                     </p>
